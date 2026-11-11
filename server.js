@@ -31,12 +31,16 @@ const SESSION_DAYS = 30;
 /* ---------- эксперты ---------- */
 function parseExperts(raw) {
   const out = new Map();
-  String(raw || "").split(/[;\n]+/).forEach((line) => {
+  let text = String(raw || "").trim().replace(/^EXPERTS\s*=\s*/i, "").replace(/^["'«]+|["'»]+$/g, "");
+  text.split(/[;\n]+/).forEach((line) => {
+    line = line.trim().replace(/^["'«]+|["'»]+$/g, "");
+    if (!line) return;
     const i = line.lastIndexOf("=");
-    if (i < 1) return;
-    let name = line.slice(0, i).trim();
-    const code = line.slice(i + 1).trim();
-    if (!name || code.length < 6) return;
+    // строка без «=» считается кодом администратора с именем «Админ»
+    let name = i < 0 ? "*Админ" : line.slice(0, i).trim();
+    const code = (i < 0 ? line : line.slice(i + 1)).trim();
+    if (!name) name = "*Админ";
+    if (code.length < 4) { console.warn("EXPERTS: пропущена запись «" + name + "»: код короче 4 символов"); return; }
     const admin = name.startsWith("*");
     if (admin) name = name.slice(1).trim();
     const id = "e" + crypto.createHash("sha256").update(name).digest("hex").slice(0, 12);
