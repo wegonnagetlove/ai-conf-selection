@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Отбор докладов=ППИ=261111</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --text:#202124;--gray:#5F6368;--lgray:#9AA0A6;--fill:#F1F3F4;--border:#DADCE0;
+  --blue:#4285F4;--red:#EA4335;--yellow:#FBBC04;--green:#34A853;
+  --blue-bg:#E8F0FE;--red-bg:#FCE8E6;--yellow-bg:#FEF7E0;--green-bg:#E6F4EA;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:#fff;color:var(--text)}
+body{font-family:'Google Sans','Roboto',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.25}
+button,input,textarea{font:inherit;color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 24px 64px}
+header.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:6px}
+.eyebrow{font-size:13px;color:var(--gray);margin:0 0 6px}
+h1{font-size:30px;font-weight:700;margin:0;letter-spacing:-.2px}
+.sub{color:var(--gray);margin:6px 0 0;font-size:15px}
+.dots{display:flex;gap:7px;padding-top:6px;flex-shrink:0}
+.dots i{width:11px;height:11px;border-radius:50%;display:block}
+.status{margin:18px 0 0;font-size:14px;color:var(--gray);min-height:18px}
+.status.warn{color:#B06000}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0 26px}
+.stat{background:var(--fill);border-radius:12px;padding:14px 16px}
+.stat b{display:block;font-size:30px;font-weight:700;line-height:1.1}
+.stat span{color:var(--gray);font-size:13px}
+.stat.g b{color:var(--green)}.stat.b b{color:var(--blue)}.stat.y b{color:#B06000}
+h2{font-size:19px;font-weight:700;margin:26px 0 12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+.folder{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:10px;border:1px solid var(--border);border-radius:14px;padding:16px;background:#fff;transition:border-color .12s}
+.folder:hover,.folder:focus-visible{border-color:var(--blue)}
+.folder .row{display:flex;gap:12px;align-items:flex-start}
+.num{flex-shrink:0;width:34px;height:34px;border-radius:50%;background:var(--blue);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:15px}
+.num.reg{background:var(--green)}
+.num.sum{background:var(--yellow);color:var(--text)}
+.folder .name{font-weight:500;font-size:16px}
+.folder .site{color:var(--gray);font-size:13px;margin-top:3px}
+.meta{display:flex;flex-wrap:wrap;gap:6px;font-size:13px;color:var(--gray)}
+.pill{background:var(--fill);border-radius:999px;padding:3px 9px;font-size:12.5px;color:var(--gray);white-space:nowrap}
+.pill.g{background:var(--green-bg);color:#137333}.pill.y{background:var(--yellow-bg);color:#B06000}.pill.r{background:var(--red-bg);color:#C5221F}.pill.b{background:var(--blue-bg);color:#1967D2}
+.bar{height:6px;background:var(--fill);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--blue)}
+.crumbs{display:flex;align-items:center;gap:10px;margin:22px 0 4px}
+.back{all:unset;cursor:pointer;color:#1967D2;font-weight:500;font-size:14px}
+.back:hover{text-decoration:underline}
+.sechead{display:flex;gap:14px;align-items:center;margin:8px 0 16px}
+.sechead h2{margin:0;font-size:22px}
+.sechead .site{color:var(--gray);font-size:14px;margin-top:3px}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
+.search{flex:1 1 260px;border:1px solid var(--border);border-radius:10px;padding:9px 12px;outline:none}
+.search:focus{border-color:var(--blue)}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{border:1px solid var(--border);background:#fff;border-radius:999px;padding:7px 12px;cursor:pointer;font-size:13.5px;color:var(--gray)}
+.seg button.on{background:var(--blue-bg);border-color:var(--blue);color:#1967D2;font-weight:500}
+.list{display:flex;flex-direction:column;gap:12px}
+.card{border:1px solid var(--border);border-left:4px solid var(--border);border-radius:12px;padding:16px 18px;background:#fff}
+.card.yes{border-left-color:var(--green)}.card.maybe{border-left-color:var(--yellow)}.card.no{border-left-color:var(--red)}
+.card h3{margin:0 0 6px;font-size:16.5px;font-weight:500;line-height:1.3}
+.who{font-size:14.5px}
+.who b{font-weight:500}
+.org{color:var(--gray);font-size:13.5px;margin-top:2px}
+.card .meta{margin-top:10px}
+details{margin-top:10px;font-size:14px}
+summary{cursor:pointer;color:#1967D2;font-size:13.5px}
+details p{margin:8px 0 0;color:var(--text);white-space:pre-wrap}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;align-items:center}
+.act{border:1px solid var(--border);background:#fff;border-radius:10px;padding:8px 14px;cursor:pointer;font-size:14px;font-weight:500;color:var(--gray)}
+.act:disabled{cursor:default;opacity:.5}
+.act.yes.on{background:var(--green);border-color:var(--green);color:#fff}
+.act.maybe.on{background:var(--yellow);border-color:var(--yellow);color:var(--text)}
+.act.no.on{background:var(--red);border-color:var(--red);color:#fff}
+.act.yes:not(.on):hover{border-color:var(--green);color:#137333}
+.act.maybe:not(.on):hover{border-color:var(--yellow);color:#B06000}
+.act.no:not(.on):hover{border-color:var(--red);color:#C5221F}
+.note{width:100%;margin-top:10px;border:1px solid var(--border);border-radius:10px;padding:8px 12px;min-height:38px;resize:vertical;font-size:14px;outline:none}
+.note:focus{border-color:var(--blue)}
+.others{margin-top:12px;padding-top:10px;border-top:1px solid var(--fill);display:flex;flex-direction:column;gap:6px;font-size:13.5px}
+.others .o{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.others .c{color:var(--gray)}
+.empty{color:var(--gray);padding:28px;text-align:center;background:var(--fill);border-radius:12px}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:13px;color:var(--gray);margin-top:8px}
+table{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:8px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{font-weight:500;color:var(--gray);font-size:13px;background:var(--fill)}
+td.n{white-space:nowrap;text-align:center}
+.btn{border:1px solid var(--blue);background:var(--blue);color:#fff;border-radius:10px;padding:8px 14px;cursor:pointer;font-weight:500;font-size:14px}
+.btn.ghost{background:#fff;color:#1967D2}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+@media (max-width:720px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:24px}.wrap{padding:20px 14px 48px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Экспертный отбор докладов</p>
+      <h1>Технологии ИИ в науке и образовании 2026</h1>
+      <p class="sub">Международная конференция. Заявки сгруппированы по секциям, отметки экспертов сохраняются и видны всем экспертам.</p>
+    </div>
+    <div class="dots" aria-hidden="true"><i style="background:#4285F4"></i><i style="background:#EA4335"></i><i style="background:#FBBC04"></i><i style="background:#34A853"></i></div>
+  </header>
+  <div id="status" class="status">Загрузка данных…</div>
+  <main id="view"></main>
+</div>
+<div id="toast" class="toast"></div>
+<script>
+(function(){
+"use strict";
+var S={sections:[],marks:{},me:null,canWrite:null,readOnly:false,names:{},filter:"all",q:"",loaded:{sec:false,marks:false}};
+var db=null,user=null,myPicks={},writing=false,dirty=false,timer=null;
+var STAT={yes:"Выбран",maybe:"Под вопросом",no:"Не подходит"};
+var STATCLS={yes:"g",maybe:"y",no:"r"};
+
+function h(tag,attrs){
+  var el=document.createElement(tag);
+  if(attrs){for(var k in attrs){var v=attrs[k];if(v==null||v===false)continue;
+    if(k==="class")el.className=v;else if(k==="text")el.textContent=v;
+    else if(k.slice(0,2)==="on")el.addEventListener(k.slice(2),v);else el.setAttribute(k,v===true?"":v);}}
+  for(var i=2;i<arguments.length;i++){var c=arguments[i];if(c==null||c===false)continue;
+    if(Array.isArray(c))c.forEach(function(x){if(x!=null&&x!==false)el.appendChild(typeof x==="string"?document.createTextNode(x):x)});
+    else el.appendChild(typeof c==="string"?document.createTextNode(c):c);}
+  return el;
+}
+function setStatus(t,warn){var s=document.getElementById("status");s.textContent=t||"";s.className="status"+(warn?" warn":"");}
+function toast(t){var el=document.getElementById("toast");el.textContent=t;el.classList.add("show");clearTimeout(toast._t);toast._t=setTimeout(function(){el.classList.remove("show")},2200);}
+function str(x){return typeof x==="string"?x:(x==null?"":String(x));}
+
+/* ---------- данные ---------- */
+function allReports(){var out=[];S.sections.forEach(function(s){(s.reports||[]).forEach(function(r){out.push(r)})});return out;}
+function marksFor(key){var out=[];for(var uid in S.marks){var p=S.marks[uid]&&S.marks[uid][key];if(p&&STAT[p.s])out.push({uid:uid,s:p.s,c:str(p.c)});}
+  if(S.me&&myPicks[key]&&STAT[myPicks[key].s]){out=out.filter(function(m){return m.uid!==S.me});out.push({uid:S.me,s:myPicks[key].s,c:str(myPicks[key].c)});}
+  else if(S.me){out=out.filter(function(m){return m.uid!==S.me});}
+  return out;}
+function myMark(key){return myPicks[key]||null;}
+function countBy(list,s){return list.filter(function(m){return m.s===s}).length;}
+function nameOf(uid){if(uid===S.me)return "Вы";return S.names[uid]||"Эксперт";}
+
+/* ---------- маршрутизация ---------- */
+function route(){var hs=(location.hash||"").replace(/^#/,"");
+  var m=/^section-(\d+)$/.exec(hs);
+  if(m)return {v:"section",n:+m[1]};
+  if(hs==="summary")return {v:"summary"};
+  return {v:"home"};}
+function go(hash){if(location.hash==="#"+hash)render();else location.hash=hash;window.scrollTo(0,0);}
+window.addEventListener("hashchange",function(){S.q="";S.filter="all";render();window.scrollTo(0,0);});
+
+/* ---------- отрисовка ---------- */
+function render(){
+  var v=document.getElementById("view");v.textContent="";
+  if(!S.loaded.sec){return;}
+  if(!S.sections.length){v.appendChild(h("div",{class:"empty",text:"Список заявок пока не загружен."}));return;}
+  var r=route();
+  if(r.v==="section"){var s=S.sections.filter(function(x){return x.num===r.n})[0];if(s){renderSection(v,s);return;}}
+  if(r.v==="summary"){renderSummary(v);return;}
+  renderHome(v);
+}
+
+function stats(){var all=allReports(),sel=0,mine=0,maybe=0;
+  all.forEach(function(r){var ms=marksFor(r.key);if(countBy(ms,"yes"))sel++;if(countBy(ms,"maybe"))maybe++;if(myMark(r.key))mine++;});
+  return {total:all.length,sel:sel,mine:mine,maybe:maybe};}
+
+function renderHome(v){
+  var st=stats();
+  v.appendChild(h("div",{class:"stats"},
+    h("div",{class:"stat b"},h("b",{text:String(st.total)}),h("span",{text:"докладов в заявках"})),
+    h("div",{class:"stat g"},h("b",{text:String(st.sel)}),h("span",{text:"выбраны хотя бы одним экспертом"})),
+    h("div",{class:"stat y"},h("b",{text:String(st.maybe)}),h("span",{text:"под вопросом"})),
+    h("div",{class:"stat"},h("b",{text:String(st.mine)}),h("span",{text:"оценено вами"}))));
+  var central=S.sections.filter(function(s){return s.num<=9}),reg=S.sections.filter(function(s){return s.num>9});
+  v.appendChild(h("h2",{text:"Центральная площадка, секции с 1 по 9"}));
+  v.appendChild(grid(central));
+  v.appendChild(h("h2",{text:"Региональные площадки"}));
+  v.appendChild(grid(reg));
+  v.appendChild(h("h2",{text:"Сводка"}));
+  var sumCard=h("button",{class:"folder",onclick:function(){go("summary")}},
+    h("div",{class:"row"},h("div",{class:"num sum",text:"Σ"}),
+      h("div",null,h("div",{class:"name",text:"Итоги отбора"}),h("div",{class:"site",text:"Все отмеченные доклады по секциям, копирование таблицы"}))));
+  v.appendChild(h("div",{class:"grid"},sumCard));
+}
+function grid(list){
+  return h("div",{class:"grid"},list.map(function(s){
+    var reps=s.reports||[],sel=0,mine=0;
+    reps.forEach(function(r){if(countBy(marksFor(r.key),"yes"))sel++;if(myMark(r.key))mine++;});
+    var pct=reps.length?Math.round(mine*100/reps.length):0;
+    return h("button",{class:"folder",onclick:function(){go("section-"+s.num)},"aria-label":"Секция "+s.num+". "+str(s.name)},
+      h("div",{class:"row"},h("div",{class:"num"+(s.num>9?" reg":""),text:String(s.num)}),
+        h("div",null,h("div",{class:"name",text:str(s.name)}),h("div",{class:"site",text:str(s.site)}))),
+      h("div",{class:"meta"},h("span",{class:"pill",text:reps.length+" "+plural(reps.length,"доклад","доклада","докладов")}),
+        sel?h("span",{class:"pill g",text:"выбрано "+sel}):null,
+        h("span",{class:"pill b",text:"оценено вами "+mine+" из "+reps.length})),
+      h("div",{class:"bar"},h("i",{style:"width:"+pct+"%"})));
+  }));
+}
+function plural(n,a,b,c){var m=n%10,mm=n%100;if(m===1&&mm!==11)return a;if(m>=2&&m<=4&&(mm<10||mm>=20))return b;return c;}
+
+function renderSection(v,s){
+  v.appendChild(h("div",{class:"crumbs"},h("button",{class:"back",onclick:function(){go("")},text:"← Все секции"})));
+  v.appendChild(h("div",{class:"sechead"},h("div",{class:"num"+(s.num>9?" reg":""),text:String(s.num)}),
+    h("div",null,h("h2",{text:str(s.name)}),h("div",{class:"site",text:str(s.site)}))));
+  if(S.readOnly)v.appendChild(h("div",{class:"status warn",style:"margin:0 0 12px",text:"У вас доступ только для просмотра: отметки ставить нельзя. Владелец страницы может дать уровень доступа «Участник» (Contributor)."}));
+  var search=h("input",{class:"search",type:"search",placeholder:"Поиск по ФИО, вузу, названию доклада",value:S.q,
+    oninput:function(e){S.q=e.target.value;drawList();}});
+  var F=[["all","Все"],["todo","Не оценены мной"],["mineyes","Выбраны мной"],["anyyes","Выбраны кем-либо"],["maybe","Под вопросом"]];
+  var seg=h("div",{class:"seg"},F.map(function(f){return h("button",{class:S.filter===f[0]?"on":"",text:f[1],onclick:function(){S.filter=f[0];render();}})}));
+  v.appendChild(h("div",{class:"tools"},search,seg));
+  var list=h("div",{class:"list"});v.appendChild(list);
+  function drawList(){
+    list.textContent="";var q=S.q.trim().toLowerCase();
+    var reps=(s.reports||[]).filter(function(r){
+      var ms=marksFor(r.key),mm=myMark(r.key);
+      if(S.filter==="todo"&&mm)return false;
+      if(S.filter==="mineyes"&&!(mm&&mm.s==="yes"))return false;
+      if(S.filter==="anyyes"&&!countBy(ms,"yes"))return false;
+      if(S.filter==="maybe"&&!countBy(ms,"maybe"))return false;
+      if(q){var hay=[r.name,r.org,r.title,r.city,(r.coauthors||[]).join(" ")].map(str).join(" ").toLowerCase();if(hay.indexOf(q)<0)return false;}
+      return true;});
+    if(!reps.length){list.appendChild(h("div",{class:"empty",text:"Нет докладов по выбранному фильтру."}));return;}
+    reps.forEach(function(r){list.appendChild(card(r))});
+  }
+  drawList();
+}
+
+function fmtShort(f){f=str(f);var o=[];if(/очно/.test(f)){var m=f.match(/Докладчик \(очно, ([^)]+)\)/);o.push(m?"очно, "+m[1]:"очно");}
+  if(/Докладчик \(дистанционно\)/.test(f))o.push("дистанционно");return o.join(" / ")||f;}
+
+function card(r){
+  var mm=myMark(r.key),ms=marksFor(r.key).filter(function(m){return m.uid!==S.me});
+  var el=h("article",{class:"card"+(mm?" "+mm.s:"")});
+  el.appendChild(h("h3",{text:str(r.title)||"Без названия"}));
+  var who=h("div",{class:"who"},h("b",{text:str(r.name)}));
+  if(r.coauthors&&r.coauthors.length)who.appendChild(document.createTextNode(", соавт.: "+r.coauthors.map(str).join(", ")));
+  el.appendChild(who);
+  el.appendChild(h("div",{class:"org",text:[r.org,r.faculty].map(str).filter(Boolean).join(", ")}));
+  el.appendChild(h("div",{class:"meta"},
+    r.level?h("span",{class:"pill",text:str(r.level)}):null,
+    r.city?h("span",{class:"pill",text:str(r.city).replace(/^Россия,\s*/,"")}):null,
+    r.fmt?h("span",{class:"pill b",text:fmtShort(r.fmt)}):null,
+    r.kind?h("span",{class:"pill",text:/Постер/.test(str(r.kind))?"постерный":"устный"}):null,
+    r.n===2?h("span",{class:"pill y",text:"второй доклад автора"}):null,
+    r.sno?h("span",{class:"pill",text:"СНО/СМУ: "+str(r.sno)}):null,
+    h("span",{class:"pill",text:"заявка № "+str(r.rid)})));
+  if(r.problem)el.appendChild(h("details",null,h("summary",{text:"Какую проблему автор хочет решить с помощью ИИ"}),h("p",{text:str(r.problem)})));
+  var dis=S.readOnly||!db||!S.me;
+  var acts=h("div",{class:"actions"},["yes","maybe","no"].map(function(k){
+    return h("button",{class:"act "+k+(mm&&mm.s===k?" on":""),disabled:dis,text:k==="yes"?"Выбрать":STAT[k],
+      onclick:function(){setPick(r.key,mm&&mm.s===k?null:k);render();}})}));
+  el.appendChild(acts);
+  if(mm){var ta=h("textarea",{class:"note",placeholder:"Комментарий эксперта (виден другим экспертам)",disabled:dis});
+    ta.value=str(mm.c);
+    ta.addEventListener("input",function(){if(myPicks[r.key]){myPicks[r.key].c=ta.value.slice(0,1000);myPicks[r.key].t=Date.now();schedule();}});
+    el.appendChild(ta);}
+  if(ms.length){el.appendChild(h("div",{class:"others"},ms.map(function(m){
+    return h("div",{class:"o"},h("span",{class:"pill "+STATCLS[m.s],text:STAT[m.s]}),h("span",{text:nameOf(m.uid)}),m.c?h("span",{class:"c",text:"«"+m.c+"»"}):null)})));}
+  return el;
+}
+
+function renderSummary(v){
+  v.appendChild(h("div",{class:"crumbs"},h("button",{class:"back",onclick:function(){go("")},text:"← Все секции"})));
+  v.appendChild(h("div",{class:"sechead"},h("div",{class:"num sum",text:"Σ"}),h("div",null,h("h2",{text:"Итоги отбора"}),h("div",{class:"site",text:"Доклады, получившие хотя бы одну отметку экспертов; порядок по числу голосов «Выбран»"}))));
+  var rows=[];
+  v.appendChild(h("div",{class:"tools"},h("button",{class:"btn",text:"Скопировать таблицу",onclick:function(){copyTSV(rows)}}),
+    h("span",{class:"legend",text:"Таблица копируется с табуляцией и вставляется в Excel или Google Таблицы."})));
+  var any=false;
+  S.sections.forEach(function(s){
+    var reps=(s.reports||[]).map(function(r){var ms=marksFor(r.key);return {r:r,ms:ms,y:countBy(ms,"yes"),m:countBy(ms,"maybe"),n:countBy(ms,"no")};})
+      .filter(function(x){return x.ms.length}).sort(function(a,b){return b.y-a.y||b.m-a.m||a.n-b.n});
+    if(!reps.length)return;any=true;
+    v.appendChild(h("h2",{text:s.num+". "+str(s.name)}));
+    var tb=h("tbody");
+    reps.forEach(function(x){
+      var yes=x.ms.filter(function(m){return m.s==="yes"}).map(function(m){return nameOf(m.uid)}).join(", ");
+      var cm=x.ms.filter(function(m){return m.c}).map(function(m){return nameOf(m.uid)+": "+m.c}).join("; ");
+      rows.push([s.num,str(s.name),str(x.r.name),(x.r.coauthors||[]).map(str).join(", "),str(x.r.org),str(x.r.title),fmtShort(x.r.fmt),x.y,x.m,x.n,yes,cm,str(x.r.rid)]);
+      tb.appendChild(h("tr",null,
+        h("td",null,h("div",{style:"font-weight:500",text:str(x.r.title)}),h("div",{class:"org",text:str(x.r.name)+", "+str(x.r.org)})),
+        h("td",{class:"n"},h("span",{class:"pill g",text:String(x.y)})),
+        h("td",{class:"n"},h("span",{class:"pill y",text:String(x.m)})),
+        h("td",{class:"n"},h("span",{class:"pill r",text:String(x.n)})),
+        h("td",{text:yes||""}),h("td",{class:"org",text:cm})));
+    });
+    v.appendChild(h("table",null,h("thead",null,h("tr",null,h("th",{text:"Доклад"}),h("th",{text:"Выбран"}),h("th",{text:"Под вопросом"}),h("th",{text:"Не подходит"}),h("th",{text:"Кто выбрал"}),h("th",{text:"Комментарии"}))),tb));
+  });
+  if(!any)v.appendChild(h("div",{class:"empty",text:"Отметок пока нет."}));
+}
+function copyTSV(rows){
+  var head=["Секция №","Секция","Автор","Соавторы","Вуз","Название доклада","Формат","Выбран","Под вопросом","Не подходит","Кто выбрал","Комментарии","Заявка №"];
+  var t=[head].concat(rows).map(function(r){return r.map(function(c){return String(c).replace(/[\t\r\n]+/g," ")}).join("\t")}).join("\n");
+  try{navigator.clipboard.writeText(t).then(function(){toast("Таблица скопирована")},function(){toast("Браузер не дал доступа к буферу обмена")});}catch(e){toast("Браузер не дал доступа к буферу обмена");}
+}
+
+/* ---------- запись отметок ---------- */
+function setPick(key,s){
+  if(s)myPicks[key]={s:s,c:myPicks[key]?str(myPicks[key].c):"",t:Date.now()};else delete myPicks[key];
+  schedule(true);
+}
+function schedule(now){dirty=true;clearTimeout(timer);timer=setTimeout(flush,now?50:700);}
+function flush(){
+  if(!db||!S.me||!dirty)return;
+  if(writing){setTimeout(flush,300);return;}
+  writing=true;dirty=false;
+  var body={picks:JSON.parse(JSON.stringify(myPicks)),updatedAt:Date.now()};
+  db.doc("marks/"+S.me).set(body).then(function(){writing=false;if(dirty)flush();},function(e){
+    writing=false;
+    if(e&&e.code==="invalid_argument"){S.readOnly=true;toast("Отметку сохранить не удалось: нет прав на запись");render();}
+    else if(e&&e.code==="unavailable"){dirty=true;setTimeout(flush,800+Math.random()*800);}
+    else toast("Отметку сохранить не удалось");
+  });
+}
+window.addEventListener("beforeunload",function(){if(dirty)flush();});
+
+/* ---------- инициализация ---------- */
+function resolveNames(){
+  if(!user)return;var ids=Object.keys(S.marks).filter(function(id){return id!==S.me&&!S.names[id]});
+  if(!ids.length)return;
+  Promise.resolve(user.profiles(ids)).then(function(ps){var ch=false;ids.forEach(function(id){var p=ps&&ps[id];var n=p&&p.name||"";if(n){S.names[id]=n;ch=true;}});if(ch)render();},function(){});
+}
+function start(){
+  var to=setTimeout(function(){if(!S.loaded.marks)setStatus("Отметки экспертов пока недоступны. Проверьте подключение и откройте страницу позже.",true);},10000);
+  fetch("data/sections.json").then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(list){
+    S.sections=(Array.isArray(list)?list:[]).filter(function(x){return x&&typeof x.num==="number"}).sort(function(a,b){return a.num-b.num});
+    S.loaded.sec=true;render();
+  }).catch(function(){S.loaded.sec=true;setStatus("Не удалось загрузить список заявок.",true);render();});
+  claude.use("user").then(function(u){user=u;
+    if(!u)return null;
+    return Promise.resolve(u.id()).then(function(id){S.me=id||null;
+      var cw=null;try{cw=u.can("data.write");}catch(e){}
+      return Promise.resolve(cw).then(function(v){S.canWrite=v;if(v===false)S.readOnly=true;});
+    });
+  }).catch(function(){}).then(function(){return claude.use("db");}).then(function(d){
+    db=d;
+    if(!db){clearTimeout(to);setStatus("Хранилище недоступно в этом просмотре. Откройте страницу по ссылке, войдя в аккаунт Claude.",true);return;}
+    updateStatus();
+    db.collection("marks").onSnapshot(function(snap){
+      var m={};snap.docs.forEach(function(d){var x=d.data();if(x&&x.picks&&typeof x.picks==="object")m[d.id]=x.picks;});
+      S.marks=m;
+      if(S.me&&m[S.me]&&!dirty&&!writing){myPicks=JSON.parse(JSON.stringify(m[S.me]));}
+      if(!S.loaded.marks||!snap.metadata.fromCache){clearTimeout(to);}
+      if(!S.loaded.marks)updateStatus();
+      S.loaded.marks=true;resolveNames();
+      var a=document.activeElement;if(!(a&&a.tagName==="TEXTAREA")&&!(a&&a.classList&&a.classList.contains("search")))render();
+    },function(){});
+  });
+}
+function updateStatus(){
+  if(!S.me)setStatus("Войдите в аккаунт Claude, чтобы ставить отметки.",true);
+  else if(S.readOnly)setStatus("Режим просмотра: отметки ставить нельзя.",true);
+  else setStatus("Отметки сохраняются автоматически и сразу видны другим экспертам.");
+}
+start();
+})();
+</script>
+</body>
+</html>
