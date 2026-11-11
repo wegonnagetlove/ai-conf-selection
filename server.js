@@ -1,0 +1,266 @@
+"use strict";
+/*
+ * Сервер страницы отбора докладов. Без внешних зависимостей (Node.js 22+).
+ *
+ * Переменные окружения:
+ *   PORT            порт (задаёт платформа)
+ *   EXPERTS         эксперты и их коды входа: "Иванов И.И.=код1; Петрова А.А.=код2"
+ *                   (разделитель ";" или перевод строки). Префикс "*" перед именем даёт права администратора.
+ *   SESSION_SECRET  длинная случайная строка для подписи cookie
+ *   GITHUB_TOKEN    fine-grained токен с правом Contents: Read and write на репозиторий
+ *   GITHUB_REPO     владелец/репозиторий, по умолчанию wegonnagetlove/ai-conf-selection
+ *   MARKS_BRANCH    ветка для хранения отметок, по умолчанию marks
+ *   MARKS_PATH      файл с отметками в этой ветке, по умолчанию marks.json
+ */
+const http = require("node:http");
+const fs = require("node:fs");
+const path = require("node:path");
+const crypto = require("node:crypto");
+
+const PORT = Number(process.env.PORT) || 3000;
+const ROOT = __dirname;
+const SITE = path.join(ROOT, "site");
+const SECRET = process.env.SESSION_SECRET || "";
+const GH_TOKEN = process.env.GITHUB_TOKEN || "";
+const GH_REPO = process.env.GITHUB_REPO || "wegonnagetlove/ai-conf-selection";
+const MARKS_BRANCH = process.env.MARKS_BRANCH || "marks";
+const MARKS_PATH = process.env.MARKS_PATH || "marks.json";
+const LOCAL_MARKS = path.join(ROOT, ".marks.local.json");
+const SESSION_DAYS = 30;
+
+/* ---------- эксперты ---------- */
+function parseExperts(raw) {
+  const out = new Map();
+  String(raw || "").split(/[;\n]+/).forEach((line) => {
+    const i = line.lastIndexOf("=");
+    if (i < 1) return;
+    let name = line.slice(0, i).trim();
+    const code = line.slice(i + 1).trim();
+    if (!name || code.length < 6) return;
+    const admin = name.startsWith("*");
+    if (admin) name = name.slice(1).trim();
+    const id = "e" + crypto.createHash("sha256").update(name).digest("hex").slice(0, 12);
+    out.set(code, { id, name, admin });
+  });
+  return out;
+}
+const EXPERTS = parseExperts(process.env.EXPERTS);
+const EXPERTS_BY_ID = new Map([...EXPERTS.values()].map((e) => [e.id, e]));
+
+function safeEqual(a, b) {
+  const x = Buffer.from(String(a)), y = Buffer.from(String(b));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+function findExpert(code) {
+  let found = null;
+  for (const [c, e] of EXPERTS) if (safeEqual(c, code)) found = e;
+  return found;
+}
+
+/* ---------- сессии ---------- */
+function sign(v) { return crypto.createHmac("sha256", SECRET).update(v).digest("base64url"); }
+function makeSession(id) {
+  const exp = Date.now() + SESSION_DAYS * 864e5;
+  const v = id + "." + exp;
+  return v + "." + sign(v);
+}
+function readSession(req) {
+  const m = /(?:^|;\s*)sid=([^;]+)/.exec(req.headers.cookie || "");
+  if (!m || !SECRET) return null;
+  const parts = decodeURIComponent(m[1]).split(".");
+  if (parts.length !== 3) return null;
+  const v = parts[0] + "." + parts[1];
+  if (!safeEqual(sign(v), parts[2])) return null;
+  if (Number(parts[1]) < Date.now()) return null;
+  return EXPERTS_BY_ID.get(parts[0]) || null;
+}
+function cookie(res, value, maxAge) {
+  res.setHeader("Set-Cookie", `sid=${encodeURIComponent(value)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`);
+}
+
+/* ---------- ограничение попыток входа ---------- */
+const attempts = new Map();
+function tooMany(ip) {
+  const now = Date.now(), a = attempts.get(ip) || { n: 0, t: now };
+  if (now - a.t > 15 * 60e3) { a.n = 0; a.t = now; }
+  a.n++; attempts.set(ip, a);
+  return a.n > 20;
+}
+
+/* ---------- отметки ---------- */
+// state.experts[id] = { name, picks: { "<заявка>-<1|2>": { s: "yes"|"maybe"|"no"|null, c: "", t: ms } } }
+let state = { experts: {} };
+let version = 0;
+let remoteSha = null;
+let dirty = false, saving = false, saveTimer = null;
+const STATUSES = new Set(["yes", "maybe", "no"]);
+
+function mergeInto(base, other) {
+  for (const [id, ex] of Object.entries((other && other.experts) || {})) {
+    if (!ex || typeof ex !== "object") continue;
+    const cur = base.experts[id] || (base.experts[id] = { name: String(ex.name || ""), picks: {} });
+    if (ex.name) cur.name = String(ex.name);
+    for (const [k, p] of Object.entries(ex.picks || {})) {
+      if (!p || typeof p.t !== "number") continue;
+      const mine = cur.picks[k];
+      if (!mine || p.t > mine.t) cur.picks[k] = { s: STATUSES.has(p.s) ? p.s : null, c: String(p.c || "").slice(0, 1000), t: p.t };
+    }
+  }
+  return base;
+}
+
+const GH_API = "https://api.github.com/repos/" + GH_REPO;
+async function gh(pathname, opts = {}) {
+  const r = await fetch(GH_API + pathname, {
+    ...opts,
+    headers: { Authorization: "Bearer " + GH_TOKEN, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "ai-conf-selection", ...(opts.headers || {}) },
+  });
+  const text = await r.text();
+  let body = null; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  return { status: r.status, body };
+}
+async function ensureBranch() {
+  const b = await gh("/branches/" + encodeURIComponent(MARKS_BRANCH));
+  if (b.status === 200) return;
+  const repo = await gh("");
+  const def = repo.body && repo.body.default_branch || "main";
+  const head = await gh("/git/ref/heads/" + encodeURIComponent(def));
+  if (head.status !== 200) throw new Error("не удалось прочитать ветку " + def + ": " + head.status);
+  const c = await gh("/git/refs", { method: "POST", body: JSON.stringify({ ref: "refs/heads/" + MARKS_BRANCH, sha: head.body.object.sha }) });
+  if (c.status !== 201 && c.status !== 422) throw new Error("не удалось создать ветку " + MARKS_BRANCH + ": " + c.status);
+}
+async function fetchRemote() {
+  const r = await gh("/contents/" + MARKS_PATH + "?ref=" + encodeURIComponent(MARKS_BRANCH));
+  if (r.status === 404) { remoteSha = null; return { experts: {} }; }
+  if (r.status !== 200) throw new Error("чтение отметок: " + r.status);
+  remoteSha = r.body.sha;
+  return JSON.parse(Buffer.from(r.body.content, "base64").toString("utf8"));
+}
+async function loadMarks() {
+  if (GH_TOKEN) {
+    await ensureBranch();
+    state = mergeInto({ experts: {} }, await fetchRemote());
+  } else {
+    console.warn("GITHUB_TOKEN не задан: отметки хранятся только в памяти и локальном файле и пропадут при перезапуске");
+    try { state = mergeInto({ experts: {} }, JSON.parse(fs.readFileSync(LOCAL_MARKS, "utf8"))); } catch {}
+  }
+  version++;
+}
+function scheduleSave() {
+  dirty = true;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, 2000);
+}
+async function save() {
+  if (!dirty) return;
+  if (saving) { scheduleSave(); return; }
+  saving = true; dirty = false;
+  try {
+    if (!GH_TOKEN) { fs.writeFileSync(LOCAL_MARKS, JSON.stringify(state)); return; }
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const content = Buffer.from(JSON.stringify(state, null, 1)).toString("base64");
+      const body = { message: "Отметки экспертов " + new Date().toISOString().slice(0, 16).replace("T", " "), content, branch: MARKS_BRANCH };
+      if (remoteSha) body.sha = remoteSha;
+      const r = await gh("/contents/" + MARKS_PATH, { method: "PUT", body: JSON.stringify(body) });
+      if (r.status === 200 || r.status === 201) { remoteSha = r.body.content.sha; return; }
+      if (r.status === 409 || r.status === 422) { mergeInto(state, await fetchRemote()); version++; continue; }
+      throw new Error("запись отметок: " + r.status + " " + JSON.stringify(r.body).slice(0, 200));
+    }
+    throw new Error("запись отметок: не удалось после повторов");
+  } catch (e) {
+    console.error(e.message); dirty = true;
+    clearTimeout(saveTimer); saveTimer = setTimeout(save, 15000);
+  } finally { saving = false; }
+}
+// периодически подтягиваем изменения, записанные другими репликами
+setInterval(async () => {
+  if (!GH_TOKEN || dirty || saving) return;
+  try { const before = JSON.stringify(state); mergeInto(state, await fetchRemote()); if (JSON.stringify(state) !== before) version++; } catch (e) { console.error(e.message); }
+}, 60e3).unref();
+async function shutdown() { clearTimeout(saveTimer); try { await save(); } finally { process.exit(0); } }
+process.on("SIGTERM", shutdown); process.on("SIGINT", shutdown);
+
+/* ---------- HTTP ---------- */
+function send(res, status, body, type) {
+  res.writeHead(status, { "Content-Type": type || "application/json; charset=utf-8", "Cache-Control": "no-store" });
+  res.end(typeof body === "string" || Buffer.isBuffer(body) ? body : JSON.stringify(body));
+}
+function readBody(req, limit = 20000) {
+  return new Promise((resolve, reject) => {
+    let size = 0; const chunks = [];
+    req.on("data", (c) => { size += c.length; if (size > limit) { reject(new Error("too large")); req.destroy(); } else chunks.push(c); });
+    req.on("end", () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}")); } catch { reject(new Error("bad json")); } });
+    req.on("error", reject);
+  });
+}
+function file(name) { return fs.readFileSync(path.join(SITE, name)); }
+let sectionsCache = null;
+function sections() { return sectionsCache || (sectionsCache = file("data/sections.json")); }
+function publicMarks() {
+  const ex = {};
+  for (const [id, e] of Object.entries(state.experts)) {
+    const picks = {};
+    for (const [k, p] of Object.entries(e.picks || {})) if (p && p.s) picks[k] = { s: p.s, c: p.c || "" };
+    ex[id] = { name: (EXPERTS_BY_ID.get(id) || {}).name || e.name || "Эксперт", picks };
+  }
+  return { version, experts: ex };
+}
+
+const server = http.createServer(async (req, res) => {
+  res.setHeader("X-Robots-Tag", "noindex, nofollow");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Frame-Options", "DENY");
+  const url = new URL(req.url, "http://x");
+  const p = url.pathname;
+  const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+  try {
+    if (p === "/healthz") return send(res, 200, "ok", "text/plain");
+    if (p === "/robots.txt") return send(res, 200, "User-agent: *\nDisallow: /\n", "text/plain");
+    if (p === "/login") return send(res, 200, file("login.html"), "text/html; charset=utf-8");
+    if (p === "/api/login" && req.method === "POST") {
+      if (!SECRET || !EXPERTS.size) return send(res, 503, { error: "Вход не настроен: задайте SESSION_SECRET и EXPERTS" });
+      if (tooMany(ip)) return send(res, 429, { error: "Слишком много попыток. Попробуйте через 15 минут." });
+      const b = await readBody(req);
+      const e = findExpert(String(b.code || "").trim());
+      if (!e) return send(res, 401, { error: "Код не подошёл" });
+      if (!state.experts[e.id]) state.experts[e.id] = { name: e.name, picks: {} };
+      cookie(res, makeSession(e.id), SESSION_DAYS * 86400);
+      return send(res, 200, { ok: true });
+    }
+    if (p === "/api/logout" && req.method === "POST") { cookie(res, "", 0); return send(res, 200, { ok: true }); }
+
+    const me = readSession(req);
+    if (!me) {
+      if (p.startsWith("/api/")) return send(res, 401, { error: "Нужен вход" });
+      res.writeHead(302, { Location: "/login", "Cache-Control": "no-store" }); return res.end();
+    }
+    if (p === "/" || p === "/index.html") return send(res, 200, file("index.html"), "text/html; charset=utf-8");
+    if (p === "/api/me") return send(res, 200, { id: me.id, name: me.name, admin: me.admin, storage: GH_TOKEN ? "github" : "memory" });
+    if (p === "/api/sections") return send(res, 200, sections());
+    if (p === "/api/marks" && req.method === "GET") {
+      if (url.searchParams.get("v") === String(version)) return send(res, 200, { version, same: true });
+      return send(res, 200, publicMarks());
+    }
+    if (p === "/api/marks" && req.method === "PUT") {
+      const b = await readBody(req);
+      const key = String(b.key || "");
+      if (!/^\d{1,12}-[12]$/.test(key)) return send(res, 400, { error: "bad key" });
+      const s = b.s == null ? null : String(b.s);
+      if (s !== null && !STATUSES.has(s)) return send(res, 400, { error: "bad status" });
+      const ex = state.experts[me.id] || (state.experts[me.id] = { name: me.name, picks: {} });
+      ex.name = me.name;
+      ex.picks[key] = { s, c: s ? String(b.c || "").slice(0, 1000) : "", t: Date.now() };
+      version++; scheduleSave();
+      return send(res, 200, { ok: true, version });
+    }
+    send(res, 404, { error: "not found" });
+  } catch (e) {
+    console.error(e);
+    send(res, 500, { error: "server error" });
+  }
+});
+
+loadMarks()
+  .catch((e) => console.error("Не удалось загрузить отметки:", e.message))
+  .finally(() => server.listen(PORT, () => console.log("listening on " + PORT + ", экспертов: " + EXPERTS.size)));

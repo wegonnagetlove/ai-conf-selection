@@ -2,3 +2,4 @@
 *.xlsx
 rows.json
 data.json
+.marks.local.json

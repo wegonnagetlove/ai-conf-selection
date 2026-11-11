@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Отбор докладов=ППИ=261111</title>
+<title>Отбор докладов: Технологии ИИ в науке и образовании 2026</title>
+<meta name="robots" content="noindex, nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -24,7 +25,8 @@ h1{font-size:30px;font-weight:700;margin:0;letter-spacing:-.2px}
 .sub{color:var(--gray);margin:6px 0 0;font-size:15px}
 .dots{display:flex;gap:7px;padding-top:6px;flex-shrink:0}
 .dots i{width:11px;height:11px;border-radius:50%;display:block}
-.status{margin:18px 0 0;font-size:14px;color:var(--gray);min-height:18px}
+.whobar{display:flex;gap:14px;align-items:center;justify-content:flex-end;font-size:14px;color:var(--gray);margin-top:10px;min-height:20px}
+.status{margin:8px 0 0;font-size:14px;color:var(--gray);min-height:18px}
 .status.warn{color:#B06000}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0 26px}
 .stat{background:var(--fill);border-radius:12px;padding:14px 16px}
@@ -102,10 +104,11 @@ td.n{white-space:nowrap;text-align:center}
     <div>
       <p class="eyebrow">Экспертный отбор докладов</p>
       <h1>Технологии ИИ в науке и образовании 2026</h1>
-      <p class="sub">Международная конференция. Заявки сгруппированы по секциям, отметки экспертов сохраняются и видны всем экспертам.</p>
+      <p class="sub">Международная конференция. Заявки сгруппированы по секциям. Отметьте доклады, которые вы выбираете для своей секции.</p>
     </div>
     <div class="dots" aria-hidden="true"><i style="background:#4285F4"></i><i style="background:#EA4335"></i><i style="background:#FBBC04"></i><i style="background:#34A853"></i></div>
   </header>
+  <div class="whobar" id="who"></div>
   <div id="status" class="status">Загрузка данных…</div>
   <main id="view"></main>
 </div>
@@ -114,7 +117,7 @@ td.n{white-space:nowrap;text-align:center}
 (function(){
 "use strict";
 var S={sections:[],marks:{},me:null,canWrite:null,readOnly:false,names:{},filter:"all",q:"",loaded:{sec:false,marks:false}};
-var db=null,user=null,myPicks={},writing=false,dirty=false,timer=null;
+var myPicks={},dirty=false;
 var STAT={yes:"Выбран",maybe:"Под вопросом",no:"Не подходит"};
 var STATCLS={yes:"g",maybe:"y",no:"r"};
 
@@ -204,7 +207,6 @@ function renderSection(v,s){
   v.appendChild(h("div",{class:"crumbs"},h("button",{class:"back",onclick:function(){go("")},text:"← Все секции"})));
   v.appendChild(h("div",{class:"sechead"},h("div",{class:"num"+(s.num>9?" reg":""),text:String(s.num)}),
     h("div",null,h("h2",{text:str(s.name)}),h("div",{class:"site",text:str(s.site)}))));
-  if(S.readOnly)v.appendChild(h("div",{class:"status warn",style:"margin:0 0 12px",text:"У вас доступ только для просмотра: отметки ставить нельзя. Владелец страницы может дать уровень доступа «Участник» (Contributor)."}));
   var search=h("input",{class:"search",type:"search",placeholder:"Поиск по ФИО, вузу, названию доклада",value:S.q,
     oninput:function(e){S.q=e.target.value;drawList();}});
   var F=[["all","Все"],["todo","Не оценены мной"],["mineyes","Выбраны мной"],["anyyes","Выбраны кем-либо"],["maybe","Под вопросом"]];
@@ -247,14 +249,14 @@ function card(r){
     r.sno?h("span",{class:"pill",text:"СНО/СМУ: "+str(r.sno)}):null,
     h("span",{class:"pill",text:"заявка № "+str(r.rid)})));
   if(r.problem)el.appendChild(h("details",null,h("summary",{text:"Какую проблему автор хочет решить с помощью ИИ"}),h("p",{text:str(r.problem)})));
-  var dis=S.readOnly||!db||!S.me;
+  var dis=!S.me;
   var acts=h("div",{class:"actions"},["yes","maybe","no"].map(function(k){
     return h("button",{class:"act "+k+(mm&&mm.s===k?" on":""),disabled:dis,text:k==="yes"?"Выбрать":STAT[k],
       onclick:function(){setPick(r.key,mm&&mm.s===k?null:k);render();}})}));
   el.appendChild(acts);
   if(mm){var ta=h("textarea",{class:"note",placeholder:"Комментарий эксперта (виден другим экспертам)",disabled:dis});
     ta.value=str(mm.c);
-    ta.addEventListener("input",function(){if(myPicks[r.key]){myPicks[r.key].c=ta.value.slice(0,1000);myPicks[r.key].t=Date.now();schedule();}});
+    ta.addEventListener("input",function(){if(myPicks[r.key]){myPicks[r.key].c=ta.value.slice(0,1000);schedule(r.key);}});
     el.appendChild(ta);}
   if(ms.length){el.appendChild(h("div",{class:"others"},ms.map(function(m){
     return h("div",{class:"o"},h("span",{class:"pill "+STATCLS[m.s],text:STAT[m.s]}),h("span",{text:nameOf(m.uid)}),m.c?h("span",{class:"c",text:"«"+m.c+"»"}):null)})));}
@@ -296,62 +298,56 @@ function copyTSV(rows){
 }
 
 /* ---------- запись отметок ---------- */
+var pendingTimers={};
+function api(method,url,body){
+  return fetch(url,{method:method,credentials:"same-origin",headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined})
+    .then(function(r){if(r.status===401){location.href="/login";throw new Error("auth");}
+      return r.json().then(function(j){if(!r.ok)throw new Error(j&&j.error||("HTTP "+r.status));return j;});});
+}
+function sendPick(key){
+  var p=myPicks[key];
+  return api("PUT","/api/marks",{key:key,s:p?p.s:null,c:p?str(p.c):""}).then(function(){},function(e){if(e.message!=="auth")toast("Отметку сохранить не удалось, повторите");});
+}
 function setPick(key,s){
-  if(s)myPicks[key]={s:s,c:myPicks[key]?str(myPicks[key].c):"",t:Date.now()};else delete myPicks[key];
-  schedule(true);
+  if(s)myPicks[key]={s:s,c:myPicks[key]?str(myPicks[key].c):""};else delete myPicks[key];
+  clearTimeout(pendingTimers[key]);dirty=true;
+  sendPick(key).then(function(){dirty=false;});
 }
-function schedule(now){dirty=true;clearTimeout(timer);timer=setTimeout(flush,now?50:700);}
-function flush(){
-  if(!db||!S.me||!dirty)return;
-  if(writing){setTimeout(flush,300);return;}
-  writing=true;dirty=false;
-  var body={picks:JSON.parse(JSON.stringify(myPicks)),updatedAt:Date.now()};
-  db.doc("marks/"+S.me).set(body).then(function(){writing=false;if(dirty)flush();},function(e){
-    writing=false;
-    if(e&&e.code==="invalid_argument"){S.readOnly=true;toast("Отметку сохранить не удалось: нет прав на запись");render();}
-    else if(e&&e.code==="unavailable"){dirty=true;setTimeout(flush,800+Math.random()*800);}
-    else toast("Отметку сохранить не удалось");
-  });
+function schedule(key){
+  clearTimeout(pendingTimers[key]);dirty=true;
+  pendingTimers[key]=setTimeout(function(){sendPick(key).then(function(){dirty=false;});},700);
 }
-window.addEventListener("beforeunload",function(){if(dirty)flush();});
 
 /* ---------- инициализация ---------- */
-function resolveNames(){
-  if(!user)return;var ids=Object.keys(S.marks).filter(function(id){return id!==S.me&&!S.names[id]});
-  if(!ids.length)return;
-  Promise.resolve(user.profiles(ids)).then(function(ps){var ch=false;ids.forEach(function(id){var p=ps&&ps[id];var n=p&&p.name||"";if(n){S.names[id]=n;ch=true;}});if(ch)render();},function(){});
+var lastVersion=null;
+function applyMarks(j){
+  if(!j||j.same)return false;
+  lastVersion=j.version;var m={},names={};
+  Object.keys(j.experts||{}).forEach(function(id){var e=j.experts[id];m[id]=e.picks||{};names[id]=str(e.name)||"Эксперт";});
+  S.marks=m;S.names=names;
+  if(S.me&&!dirty){var mine=m[S.me]||{};myPicks=JSON.parse(JSON.stringify(mine));}
+  S.loaded.marks=true;return true;
+}
+function poll(){
+  api("GET","/api/marks"+(lastVersion!=null?"?v="+lastVersion:"")).then(function(j){
+    if(applyMarks(j)){var a=document.activeElement;if(!(a&&(a.tagName==="TEXTAREA"||a.tagName==="INPUT")))render();}
+    setStatus(S.statusText,false);
+  },function(e){if(e.message!=="auth")setStatus("Нет связи с сервером, отметки других экспертов могут быть неактуальны.",true);});
 }
 function start(){
-  var to=setTimeout(function(){if(!S.loaded.marks)setStatus("Отметки экспертов пока недоступны. Проверьте подключение и откройте страницу позже.",true);},10000);
-  fetch("data/sections.json").then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(list){
-    S.sections=(Array.isArray(list)?list:[]).filter(function(x){return x&&typeof x.num==="number"}).sort(function(a,b){return a.num-b.num});
-    S.loaded.sec=true;render();
-  }).catch(function(){S.loaded.sec=true;setStatus("Не удалось загрузить список заявок.",true);render();});
-  claude.use("user").then(function(u){user=u;
-    if(!u)return null;
-    return Promise.resolve(u.id()).then(function(id){S.me=id||null;
-      var cw=null;try{cw=u.can("data.write");}catch(e){}
-      return Promise.resolve(cw).then(function(v){S.canWrite=v;if(v===false)S.readOnly=true;});
-    });
-  }).catch(function(){}).then(function(){return claude.use("db");}).then(function(d){
-    db=d;
-    if(!db){clearTimeout(to);setStatus("Хранилище недоступно в этом просмотре. Откройте страницу по ссылке, войдя в аккаунт Claude.",true);return;}
-    updateStatus();
-    db.collection("marks").onSnapshot(function(snap){
-      var m={};snap.docs.forEach(function(d){var x=d.data();if(x&&x.picks&&typeof x.picks==="object")m[d.id]=x.picks;});
-      S.marks=m;
-      if(S.me&&m[S.me]&&!dirty&&!writing){myPicks=JSON.parse(JSON.stringify(m[S.me]));}
-      if(!S.loaded.marks||!snap.metadata.fromCache){clearTimeout(to);}
-      if(!S.loaded.marks)updateStatus();
-      S.loaded.marks=true;resolveNames();
-      var a=document.activeElement;if(!(a&&a.tagName==="TEXTAREA")&&!(a&&a.classList&&a.classList.contains("search")))render();
-    },function(){});
-  });
-}
-function updateStatus(){
-  if(!S.me)setStatus("Войдите в аккаунт Claude, чтобы ставить отметки.",true);
-  else if(S.readOnly)setStatus("Режим просмотра: отметки ставить нельзя.",true);
-  else setStatus("Отметки сохраняются автоматически и сразу видны другим экспертам.");
+  Promise.all([api("GET","/api/me"),api("GET","/api/sections"),api("GET","/api/marks")]).then(function(r){
+    var me=r[0];S.me=me.id;S.myName=str(me.name);
+    S.sections=(Array.isArray(r[1])?r[1]:[]).filter(function(x){return x&&typeof x.num==="number"}).sort(function(a,b){return a.num-b.num});
+    S.loaded.sec=true;applyMarks(r[2]);
+    S.statusText=me.storage==="github"?"Отметки сохраняются автоматически и видны другим экспертам.":"Внимание: постоянное хранилище не настроено, отметки пропадут при перезапуске сервера.";
+    setStatus(S.statusText,me.storage!=="github");
+    var who=document.getElementById("who");who.textContent="";
+    who.appendChild(h("span",{text:S.myName}));
+    who.appendChild(h("button",{class:"back",text:"Выйти",onclick:function(){api("POST","/api/logout").then(function(){location.href="/login";},function(){location.href="/login";});}}));
+    render();
+    setInterval(function(){if(!document.hidden)poll();},8000);
+    document.addEventListener("visibilitychange",function(){if(!document.hidden)poll();});
+  },function(e){if(e.message!=="auth"){S.loaded.sec=true;setStatus("Не удалось загрузить данные: "+e.message,true);render();}});
 }
 start();
 })();

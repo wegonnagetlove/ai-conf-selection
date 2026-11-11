@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Вход: отбор докладов</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--text:#202124;--gray:#5F6368;--fill:#F1F3F4;--border:#DADCE0;--blue:#4285F4;--red:#EA4335}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--text);font-family:'Google Sans','Roboto',system-ui,sans-serif;line-height:1.25;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.box{width:100%;max-width:420px;border:1px solid var(--border);border-radius:16px;padding:28px}
+.dots{display:flex;gap:7px;margin-bottom:18px}.dots i{width:11px;height:11px;border-radius:50%;display:block}
+p.eyebrow{font-size:13px;color:var(--gray);margin:0 0 6px}
+h1{font-size:22px;margin:0 0 6px}
+p.sub{color:var(--gray);font-size:14px;margin:0 0 22px}
+label{display:block;font-size:13px;color:var(--gray);margin-bottom:6px}
+input{width:100%;font:inherit;font-size:16px;border:1px solid var(--border);border-radius:10px;padding:11px 12px;outline:none}
+input:focus{border-color:var(--blue)}
+button{margin-top:14px;width:100%;font:inherit;font-weight:500;font-size:15px;border:0;border-radius:10px;padding:11px;background:var(--blue);color:#fff;cursor:pointer}
+button:disabled{opacity:.6;cursor:default}
+.err{color:#C5221F;font-size:14px;min-height:18px;margin-top:12px}
+</style>
+</head>
+<body>
+<form class="box" id="f">
+  <div class="dots" aria-hidden="true"><i style="background:#4285F4"></i><i style="background:#EA4335"></i><i style="background:#FBBC04"></i><i style="background:#34A853"></i></div>
+  <p class="eyebrow">Экспертный отбор докладов</p>
+  <h1>Технологии ИИ в науке и образовании 2026</h1>
+  <p class="sub">Страница доступна только экспертам конференции. Введите личный код, который вам выдал оргкомитет.</p>
+  <label for="code">Код эксперта</label>
+  <input id="code" name="code" type="password" autocomplete="current-password" required autofocus>
+  <button id="b" type="submit">Войти</button>
+  <div class="err" id="err" role="alert"></div>
+</form>
+<script>
+document.getElementById("f").addEventListener("submit",function(e){
+  e.preventDefault();var b=document.getElementById("b"),err=document.getElementById("err");
+  b.disabled=true;err.textContent="";
+  fetch("/api/login",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:document.getElementById("code").value})})
+    .then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||"Ошибка входа");location.href="/";});})
+    .catch(function(x){err.textContent=x.message;b.disabled=false;});
+});
+</script>
+</body>
+</html>
