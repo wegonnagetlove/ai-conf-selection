@@ -101,11 +101,23 @@ def main():
     assigned, unmatched = {}, []
     for k, f in manual.items():
         assigned[k] = f
+    # точное соответствие из выгрузки XLS (rows.json после parse.py): колонки 30 и 34 — файлы тезисов
+    exact = {}
+    rows_json = ROOT / "rows.json"
+    if rows_json.exists():
+        for r in json.loads(rows_json.read_text(encoding="utf-8"))[1:]:
+            for col, n in ((30, 1), (34, 2)):
+                name = (r[col] if len(r) > col else "").strip()
+                if name and f"{r[0]}-{n}" in reports:
+                    exact[name] = f"{r[0]}-{n}"
     for src in sources:
         files = collect(src, tmp)
         print(f"{src}: документов {len(files)}")
         per_rid = {}
         for f in files:
+            if f.name in exact:
+                assigned.setdefault(exact[f.name], f)
+                continue
             rel = str(f)
             rids = [rid for rid in by_rid if re.search(rf"(?<!\d){rid}(?!\d)", rel)]
             if not rids:
