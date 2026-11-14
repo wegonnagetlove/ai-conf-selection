@@ -20,6 +20,8 @@ const crypto = require("node:crypto");
 const PORT = Number(process.env.PORT) || 3000;
 const ROOT = __dirname;
 const SITE = path.join(ROOT, "site");
+// PDF тезисов: files/<номер заявки>-<1|2>.pdf, отдаются только вошедшим экспертам
+const FILES = path.join(ROOT, "files");
 const SECRET = process.env.SESSION_SECRET || "";
 const GH_TOKEN = process.env.GITHUB_TOKEN || "";
 const GH_REPO = process.env.GITHUB_REPO || "wegonnagetlove/ai-conf-selection";
@@ -242,6 +244,17 @@ const server = http.createServer(async (req, res) => {
     if (p === "/" || p === "/index.html") return send(res, 200, file("index.html"), "text/html; charset=utf-8");
     if (p === "/api/me") return send(res, 200, { id: me.id, name: me.name, admin: me.admin, storage: GH_TOKEN ? "github" : "memory" });
     if (p === "/api/sections") return send(res, 200, sections());
+    const pdf = p.match(/^\/files\/(\d{1,12}-[12])\.pdf$/);
+    if (pdf) {
+      const fp = path.join(FILES, pdf[1] + ".pdf");
+      if (!fs.existsSync(fp)) return send(res, 404, { error: "Файла нет" });
+      res.writeHead(200, {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="${pdf[1]}.pdf"`,
+        "Cache-Control": "private, max-age=3600",
+      });
+      return fs.createReadStream(fp).pipe(res);
+    }
     if (p === "/api/marks" && req.method === "GET") {
       if (url.searchParams.get("v") === String(version)) return send(res, 200, { version, same: true });
       return send(res, 200, publicMarks());

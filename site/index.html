@@ -92,6 +92,8 @@ th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);ver
 th{font-weight:500;color:var(--gray);font-size:13px;background:var(--fill)}
 td.n{white-space:nowrap;text-align:center}
 .btn{border:1px solid var(--blue);background:var(--blue);color:#fff;border-radius:10px;padding:8px 14px;cursor:pointer;font-weight:500;font-size:14px}
+.pdfrow{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.pdfrow .btn{text-decoration:none}
 .btn.ghost{background:#fff;color:#1967D2}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
@@ -248,6 +250,9 @@ function card(r){
     r.n===2?h("span",{class:"pill y",text:"второй доклад автора"}):null,
     r.sno?h("span",{class:"pill",text:"СНО/СМУ: "+str(r.sno)}):null,
     h("span",{class:"pill",text:"заявка № "+str(r.rid)})));
+  if(r.pdf)el.appendChild(h("div",{class:"pdfrow"},
+    h("a",{class:"btn ghost",href:"/files/"+r.key+".pdf",target:"_blank",rel:"noopener",text:"Открыть тезисы (PDF)"}),
+    r.pages?h("span",{class:"org",text:r.pages+" "+(r.pages%10===1&&r.pages%100!==11?"страница":(r.pages%10>=2&&r.pages%10<=4&&(r.pages%100<10||r.pages%100>=20)?"страницы":"страниц"))}):null));
   if(r.problem)el.appendChild(h("details",null,h("summary",{text:"Какую проблему автор хочет решить с помощью ИИ"}),h("p",{text:str(r.problem)})));
   var dis=!S.me;
   var acts=h("div",{class:"actions"},["yes","maybe","no"].map(function(k){

@@ -25,3 +25,6 @@ print(collections.Counter(x['sec'] for x in reports))
 secs=[dict(num=n,name=NAMES[n],site=SITES.get(n,'Центральная площадка, МГУ'),reports=[x for x in reports if x['sec']==n]) for n in NAMES]
 json.dump(secs,open('site/data/sections.json','w'),ensure_ascii=False,indent=1)
 for s in secs: print(s['num'], len(json.dumps(s,ensure_ascii=False).encode()))
+# отметки PDF тезисов (files/<ключ>.pdf) сохраняются при пересборке
+import subprocess, sys as _s
+subprocess.run([_s.executable, str(__import__('pathlib').Path(__file__).with_name('attach_pdfs.py'))])
