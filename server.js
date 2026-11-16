@@ -5,7 +5,8 @@
  * Переменные окружения:
  *   PORT            порт (задаёт платформа)
  *   EXPERTS         эксперты и их коды входа: "Иванов И.И.=код1; Петрова А.А.=код2"
- *                   (разделитель ";" или перевод строки). Префикс "*" перед именем даёт права администратора.
+ *                   (разделитель ";" или перевод строки). Префикс "*" перед именем даёт права администратора
+ *                   (оператора), префикс "#6" или "#6,7" делает человека куратором этих секций.
  *   SESSION_SECRET  длинная случайная строка для подписи cookie
  *   GITHUB_TOKEN    fine-grained токен с правом Contents: Read and write на репозиторий
  *   GITHUB_REPO     владелец/репозиторий, по умолчанию wegonnagetlove/ai-conf-selection
@@ -13,6 +14,7 @@
  *   MARKS_PATH      файл с отметками в этой ветке, по умолчанию marks.json
  */
 const http = require("node:http");
+const { programDocx } = require("./program");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
@@ -43,10 +45,18 @@ function parseExperts(raw) {
     const code = (i < 0 ? line : line.slice(i + 1)).trim();
     if (!name) name = "*Админ";
     if (code.length < 4) { console.warn("EXPERTS: пропущена запись «" + name + "»: код короче 4 символов"); return; }
-    const admin = name.startsWith("*");
-    if (admin) name = name.slice(1).trim();
+    // префиксы в любом порядке: "*" администратор (оператор), "#6,7" куратор секций 6 и 7
+    let admin = false; const secs = [];
+    for (;;) {
+      name = name.trim();
+      if (name.startsWith("*")) { admin = true; name = name.slice(1); continue; }
+      const m = /^#\s*(\d{1,2}(?:\s*,\s*\d{1,2})*)/.exec(name);
+      if (m) { m[1].split(",").forEach((x) => secs.push(Number(x))); name = name.slice(m[0].length); continue; }
+      break;
+    }
+    name = name.trim() || "Админ";
     const id = "e" + crypto.createHash("sha256").update(name).digest("hex").slice(0, 12);
-    out.set(code, { id, name, admin });
+    out.set(code, { id, name, admin, secs });
   });
   return out;
 }
@@ -95,11 +105,27 @@ function tooMany(ip) {
 
 /* ---------- отметки ---------- */
 // state.experts[id] = { name, picks: { "<заявка>-<1|2>": { s: "yes"|"maybe"|"no"|null, c: "", t: ms } } }
-let state = { experts: {} };
+// state.decisions["<заявка>-<1|2>"] = { d, rev, revOk, fact, note, by, t }  решение куратора
+// state.order["<секция>"] = { keys: [...], t }                         порядок докладов в программе
+// state.secinfo["<секция>"] = { time, hall, moderator, experts, t }     шапка программы секции
+let state = { experts: {}, decisions: {}, order: {}, secinfo: {} };
 let version = 0;
 let remoteSha = null;
 let dirty = false, saving = false, saveTimer = null;
 const STATUSES = new Set(["yes", "maybe", "no"]);
+// решения куратора и соответствующие статусы на портале «Ломоносов»
+const DECISIONS = {
+  oral_off: "Одобрено: устный доклад (очно)",
+  oral_on: "Одобрено: устный доклад (онлайн)",
+  poster: "Одобрено: постер (очно)",
+  listen_off: "Одобрено: очный участник-слушатель",
+  listen_on: "Одобрено: онлайн участник-слушатель",
+  revise: "Требуется доработка (до 01.12)",
+  reject: "Отклонено",
+};
+const FACTS = { spoke: "Выступил", noshow: "Не явился" };
+const KEY_RE = /^\d{1,12}-[12]$/;
+const clip = (x, n) => String(x == null ? "" : x).slice(0, n);
 
 function mergeInto(base, other) {
   for (const [id, ex] of Object.entries((other && other.experts) || {})) {
@@ -112,7 +138,32 @@ function mergeInto(base, other) {
       if (!mine || p.t > mine.t) cur.picks[k] = { s: STATUSES.has(p.s) ? p.s : null, c: String(p.c || "").slice(0, 1000), t: p.t };
     }
   }
+  base.decisions = base.decisions || {}; base.order = base.order || {}; base.secinfo = base.secinfo || {};
+  for (const [k, v] of Object.entries((other && other.decisions) || {})) {
+    if (!KEY_RE.test(k) || !v || typeof v.t !== "number") continue;
+    if (!base.decisions[k] || v.t > base.decisions[k].t) base.decisions[k] = cleanDecision(v, v.by, v.t);
+  }
+  for (const [k, v] of Object.entries((other && other.order) || {})) {
+    if (!v || typeof v.t !== "number" || !Array.isArray(v.keys)) continue;
+    if (!base.order[k] || v.t > base.order[k].t) base.order[k] = { keys: v.keys.filter((x) => KEY_RE.test(String(x))).slice(0, 200), t: v.t };
+  }
+  for (const [k, v] of Object.entries((other && other.secinfo) || {})) {
+    if (!v || typeof v.t !== "number") continue;
+    if (!base.secinfo[k] || v.t > base.secinfo[k].t) base.secinfo[k] = cleanSecinfo(v, v.t);
+  }
   return base;
+}
+
+function cleanDecision(b, by, t) {
+  return {
+    d: Object.prototype.hasOwnProperty.call(DECISIONS, b.d) ? b.d : null,
+    rev: !!b.rev, revOk: !!b.revOk,
+    fact: Object.prototype.hasOwnProperty.call(FACTS, b.fact) ? b.fact : null,
+    note: clip(b.note, 1000), by: clip(by, 40), t,
+  };
+}
+function cleanSecinfo(b, t) {
+  return { time: clip(b.time, 60), hall: clip(b.hall, 200), moderator: clip(b.moderator, 1500), experts: clip(b.experts, 3000), t };
 }
 
 const GH_API = "https://api.github.com/repos/" + GH_REPO;
@@ -145,10 +196,10 @@ async function fetchRemote() {
 async function loadMarks() {
   if (GH_TOKEN) {
     await ensureBranch();
-    state = mergeInto({ experts: {} }, await fetchRemote());
+    state = mergeInto({ experts: {}, decisions: {}, order: {}, secinfo: {} }, await fetchRemote());
   } else {
     console.warn("GITHUB_TOKEN не задан: отметки хранятся только в памяти и локальном файле и пропадут при перезапуске");
-    try { state = mergeInto({ experts: {} }, JSON.parse(fs.readFileSync(LOCAL_MARKS, "utf8"))); } catch {}
+    try { state = mergeInto({ experts: {}, decisions: {}, order: {}, secinfo: {} }, JSON.parse(fs.readFileSync(LOCAL_MARKS, "utf8"))); } catch {}
   }
   version++;
 }
@@ -165,7 +216,7 @@ async function save() {
     if (!GH_TOKEN) { fs.writeFileSync(LOCAL_MARKS, JSON.stringify(state)); return; }
     for (let attempt = 0; attempt < 4; attempt++) {
       const content = Buffer.from(JSON.stringify(state, null, 1)).toString("base64");
-      const body = { message: "Отметки экспертов " + new Date().toISOString().slice(0, 16).replace("T", " "), content, branch: MARKS_BRANCH };
+      const body = { message: "Отметки и решения " + new Date().toISOString().slice(0, 16).replace("T", " "), content, branch: MARKS_BRANCH };
       if (remoteSha) body.sha = remoteSha;
       const r = await gh("/contents/" + MARKS_PATH, { method: "PUT", body: JSON.stringify(body) });
       if (r.status === 200 || r.status === 201) { remoteSha = r.body.content.sha; return; }
@@ -202,6 +253,25 @@ function readBody(req, limit = 20000) {
 function file(name) { return fs.readFileSync(path.join(SITE, name)); }
 let sectionsCache = null;
 function sections() { return sectionsCache || (sectionsCache = file("data/sections.json")); }
+let reportIndex = null;
+function reports() {
+  if (reportIndex) return reportIndex;
+  reportIndex = new Map();
+  try { for (const s of JSON.parse(sections())) for (const r of s.reports || []) reportIndex.set(r.key, { ...r, sec: s.num, secName: s.name }); } catch {}
+  return reportIndex;
+}
+// «Петрухина Полина Игоревна» и «Петрухина П.И.» дают один ключ «петрухина пи»
+function personKey(n) {
+  const w = String(n || "").replace(/ё/gi, "е").replace(/[.,]/g, " ").trim().split(/\s+/).filter(Boolean);
+  if (!w.length) return "";
+  return (w[0] + " " + w.slice(1, 3).map((x) => x[0]).join("")).toLowerCase();
+}
+function conflict(me, r) {
+  const k = personKey(me.name);
+  return !!k && [r.name, ...(r.coauthors || [])].some((n) => personKey(n) === k);
+}
+function canDecide(me, r) { return !!r && (me.admin || (me.secs || []).includes(r.sec)); }
+
 function publicMarks() {
   const ex = {};
   for (const [id, e] of Object.entries(state.experts)) {
@@ -209,7 +279,7 @@ function publicMarks() {
     for (const [k, p] of Object.entries(e.picks || {})) if (p && p.s) picks[k] = { s: p.s, c: p.c || "" };
     ex[id] = { name: (EXPERTS_BY_ID.get(id) || {}).name || e.name || "Эксперт", picks };
   }
-  return { version, experts: ex };
+  return { version, experts: ex, decisions: state.decisions || {}, order: state.order || {}, secinfo: state.secinfo || {}, labels: { decisions: DECISIONS, facts: FACTS } };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -242,7 +312,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(302, { Location: "/login", "Cache-Control": "no-store" }); return res.end();
     }
     if (p === "/" || p === "/index.html") return send(res, 200, file("index.html"), "text/html; charset=utf-8");
-    if (p === "/api/me") return send(res, 200, { id: me.id, name: me.name, admin: me.admin, storage: GH_TOKEN ? "github" : "memory" });
+    if (p === "/api/me") return send(res, 200, { id: me.id, name: me.name, admin: me.admin, secs: me.secs || [], storage: GH_TOKEN ? "github" : "memory" });
     if (p === "/api/sections") return send(res, 200, sections());
     const pdf = p.match(/^\/files\/(\d{1,12}-[12])\.pdf$/);
     if (pdf) {
@@ -270,6 +340,46 @@ const server = http.createServer(async (req, res) => {
       ex.picks[key] = { s, c: s ? String(b.c || "").slice(0, 1000) : "", t: Date.now() };
       version++; scheduleSave();
       return send(res, 200, { ok: true, version });
+    }
+    if (p === "/api/decision" && req.method === "PUT") {
+      const b = await readBody(req);
+      const r = reports().get(String(b.key || ""));
+      if (!r) return send(res, 400, { error: "Нет такого доклада" });
+      if (!canDecide(me, r)) return send(res, 403, { error: "Решение по этой секции принимает её куратор" });
+      if (conflict(me, r)) return send(res, 403, { error: "Это ваша заявка: решение по ней принимает другой член оргкомитета" });
+      state.decisions[r.key] = cleanDecision(b, me.name, Date.now());
+      version++; scheduleSave();
+      return send(res, 200, { ok: true, version });
+    }
+    if (p === "/api/order" && req.method === "PUT") {
+      const b = await readBody(req);
+      const sec = Number(b.sec);
+      if (!(me.admin || (me.secs || []).includes(sec))) return send(res, 403, { error: "Порядок секции задаёт её куратор" });
+      const keys = (Array.isArray(b.keys) ? b.keys : []).map(String).filter((k) => KEY_RE.test(k) && (reports().get(k) || {}).sec === sec);
+      state.order[String(sec)] = { keys, t: Date.now() };
+      version++; scheduleSave();
+      return send(res, 200, { ok: true, version });
+    }
+    if (p === "/api/secinfo" && req.method === "PUT") {
+      const b = await readBody(req);
+      const sec = Number(b.sec);
+      if (!(me.admin || (me.secs || []).includes(sec))) return send(res, 403, { error: "Данные секции заполняет её куратор" });
+      state.secinfo[String(sec)] = cleanSecinfo(b, Date.now());
+      version++; scheduleSave();
+      return send(res, 200, { ok: true, version });
+    }
+    if (p === "/api/program.docx" && req.method === "GET") {
+      const want = url.searchParams.get("sec");
+      const secs = JSON.parse(sections()).filter((s) => !want || want === "all" || String(s.num) === want);
+      if (!secs.length) return send(res, 404, { error: "Нет такой секции" });
+      const buf = programDocx(secs, state);
+      const fname = want && want !== "all" ? "Программа секции " + want + ".docx" : "Программа секций.docx";
+      res.writeHead(200, {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "Content-Disposition": "attachment; filename*=UTF-8''" + encodeURIComponent(fname),
+        "Cache-Control": "no-store",
+      });
+      return res.end(buf);
     }
     send(res, 404, { error: "not found" });
   } catch (e) {

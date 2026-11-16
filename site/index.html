@@ -95,6 +95,28 @@ td.n{white-space:nowrap;text-align:center}
 .pdfrow{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
 .pdfrow .btn{text-decoration:none}
 .btn.ghost{background:#fff;color:#1967D2}
+.flags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.decide{margin-top:14px;padding:12px 14px;background:var(--fill);border-radius:12px;display:flex;flex-direction:column;gap:10px}
+.decide .lbl{font-size:13px;color:var(--gray);font-weight:500}
+.decide .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.decide select,.decide input[type=text],.panel input[type=text],.panel textarea{border:1px solid var(--border);border-radius:10px;padding:8px 10px;background:#fff;font-size:14px;outline:none}
+.decide select{min-width:260px}
+.decide select:focus,.panel input:focus,.panel textarea:focus{border-color:var(--blue)}
+.decide label{display:flex;gap:6px;align-items:center;font-size:14px;cursor:pointer}
+.card.dec{border-left-color:var(--blue)}
+.panel{border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:18px;display:flex;flex-direction:column;gap:12px}
+.panel h3{margin:0;font-size:16px;font-weight:500}
+.panel .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.panel textarea{width:100%;min-height:70px;resize:vertical}
+.panel input[type=text]{width:100%}
+.panel .lbl{font-size:13px;color:var(--gray);margin-bottom:4px}
+.olist{display:flex;flex-direction:column;gap:6px}
+.oitem{display:flex;gap:10px;align-items:center;border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:14px}
+.oitem .t{flex:1}
+.oitem .mv{all:unset;cursor:pointer;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;text-align:center;line-height:28px;color:var(--gray)}
+.oitem .mv:hover{border-color:var(--blue);color:#1967D2}
+.oitem .no{width:24px;text-align:right;color:var(--gray)}
+@media (max-width:720px){.panel .grid2{grid-template-columns:1fr}.decide select{min-width:0;width:100%}}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 @media (max-width:720px){.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:24px}.wrap{padding:20px 14px 48px}}
@@ -118,7 +140,11 @@ td.n{white-space:nowrap;text-align:center}
 <script>
 (function(){
 "use strict";
-var S={sections:[],marks:{},me:null,canWrite:null,readOnly:false,names:{},filter:"all",q:"",loaded:{sec:false,marks:false}};
+var S={sections:[],marks:{},me:null,canWrite:null,readOnly:false,names:{},filter:"all",q:"",loaded:{sec:false,marks:false},
+  admin:false,secs:[],dec:{},order:{},secinfo:{},labels:{decisions:{},facts:{}}};
+var DEC_ORDER=["oral_off","oral_on","poster","listen_off","listen_on","revise","reject"];
+var DEC_SHORT={oral_off:"устный очно",oral_on:"устный онлайн",poster:"постер",listen_off:"слушатель очно",listen_on:"слушатель онлайн",revise:"доработка",reject:"отклонено"};
+var LIMIT={oral:7,poster:8};
 var myPicks={},dirty=false;
 var STAT={yes:"Выбран",maybe:"Под вопросом",no:"Не подходит"};
 var STATCLS={yes:"g",maybe:"y",no:"r"};
@@ -146,6 +172,47 @@ function marksFor(key){var out=[];for(var uid in S.marks){var p=S.marks[uid]&&S.
 function myMark(key){return myPicks[key]||null;}
 function countBy(list,s){return list.filter(function(m){return m.s===s}).length;}
 function nameOf(uid){if(uid===S.me)return "Вы";return S.names[uid]||"Эксперт";}
+
+/* ---------- решения кураторов и проверки ---------- */
+function canDecide(sec){return S.admin||S.secs.indexOf(sec)>=0;}
+function isCurator(){return S.admin||S.secs.length>0;}
+function personKey(n){var w=str(n).replace(/ё/gi,"е").replace(/[.,]/g," ").trim().split(/\s+/).filter(Boolean);
+  if(!w.length)return "";return (w[0]+" "+w.slice(1,3).map(function(x){return x[0]}).join("")).toLowerCase();}
+function mine(r){var k=personKey(S.myName);if(!k)return false;return [r.name].concat(r.coauthors||[]).some(function(n){return personKey(n)===k});}
+function decOf(key){return S.dec[key]||null;}
+function portalStatus(key){var d=decOf(key);if(!d)return "";if(d.fact&&S.labels.facts[d.fact])return S.labels.facts[d.fact];return d.d?str(S.labels.decisions[d.d]):"";}
+function isDistant(r){var f=str(r.fmt);return /Докладчик \(дистанционно\)/.test(f)&&!/Докладчик \(очно/.test(f);}
+function isPoster(r){return /Постер/.test(str(r.kind));}
+var byRid=null;
+function ridReports(rid){if(!byRid){byRid={};allReports().forEach(function(x){(byRid[x.rid]=byRid[x.rid]||[]).push(x)});}return byRid[rid]||[];}
+function secOf(r){var n=null;S.sections.forEach(function(s){if((s.reports||[]).indexOf(r)>=0)n=s.num});return n;}
+// автоматические пометки для куратора: то, что по инструкции проверяется до отбора
+function flags(r){
+  var f=[],d=decOf(r.key),dd=d&&d.d;
+  if(r.over35===true)f.push(["r","старше 35: по инструкции в слушатели"]);
+  if(str(r.level)==="Абитуриент")f.push(["y","школьник: проверить класс (10–11)"]);
+  if(isPoster(r)&&isDistant(r))f.push(["r","постер + дистанционно: только устный"]);
+  if(!/Докладчик/.test(str(r.fmt)))f.push(["y","в заявке нет формата докладчика"]);
+  if(!r.pdf)f.push(["r","нет файла тезисов: запросить по почте"]);
+  if(r.chars>5500)f.push(["r","≈"+r.chars+" знаков: больше 5000, проверить"]);
+  else if(r.chars>5000)f.push(["y","≈"+r.chars+" знаков: на границе лимита"]);
+  if(r.pages>2)f.push(["y",r.pages+" стр.: лимит 2 страницы"]);
+  var other=ridReports(r.rid).filter(function(x){return x.key!==r.key});
+  if(other.length)f.push(["y","второй доклад автора: секция "+other.map(secOf).join(", ")]);
+  if(dd==="poster"&&isDistant(r))f.push(["r","решение «постер», а участник дистанционно"]);
+  if(dd==="poster"&&secOf(r)>9)f.push(["r","на региональных площадках постеров нет"]);
+  if(mine(r))f.push(["b","ваша заявка: решает другой член оргкомитета"]);
+  return f;}
+function sectionCounts(s){var c={oral:0,poster:0,none:0,listen:0};
+  (s.reports||[]).forEach(function(r){var d=decOf(r.key),dd=d&&d.d;
+    if(dd==="oral_off"||dd==="oral_on")c.oral++;else if(dd==="poster")c.poster++;else if(dd==="listen_off"||dd==="listen_on")c.listen++;else if(!dd)c.none++;});
+  return c;}
+function sendDecision(key,patch){
+  var cur=decOf(key)||{},next={d:cur.d||null,rev:!!cur.rev,revOk:!!cur.revOk,fact:cur.fact||null,note:str(cur.note)};
+  for(var k in patch)next[k]=patch[k];
+  S.dec[key]=next;dirty=true;
+  return api("PUT","/api/decision",{key:key,d:next.d,rev:next.rev,revOk:next.revOk,fact:next.fact,note:next.note})
+    .then(function(){dirty=false;},function(e){dirty=false;if(e.message!=="auth")toast(e.message||"Решение не сохранилось");});}
 
 /* ---------- маршрутизация ---------- */
 function route(){var hs=(location.hash||"").replace(/^#/,"");
@@ -212,7 +279,9 @@ function renderSection(v,s){
   var search=h("input",{class:"search",type:"search",placeholder:"Поиск по ФИО, вузу, названию доклада",value:S.q,
     oninput:function(e){S.q=e.target.value;drawList();}});
   var F=[["all","Все"],["todo","Не оценены мной"],["mineyes","Выбраны мной"],["anyyes","Выбраны кем-либо"],["maybe","Под вопросом"]];
+  if(canDecide(s.num))F=F.concat([["nodec","Без решения куратора"],["flag","С пометками"]]);
   var seg=h("div",{class:"seg"},F.map(function(f){return h("button",{class:S.filter===f[0]?"on":"",text:f[1],onclick:function(){S.filter=f[0];render();}})}));
+  if(canDecide(s.num))v.appendChild(curatorPanel(s));
   v.appendChild(h("div",{class:"tools"},search,seg));
   var list=h("div",{class:"list"});v.appendChild(list);
   function drawList(){
@@ -223,6 +292,8 @@ function renderSection(v,s){
       if(S.filter==="mineyes"&&!(mm&&mm.s==="yes"))return false;
       if(S.filter==="anyyes"&&!countBy(ms,"yes"))return false;
       if(S.filter==="maybe"&&!countBy(ms,"maybe"))return false;
+      if(S.filter==="nodec"&&decOf(r.key)&&decOf(r.key).d)return false;
+      if(S.filter==="flag"&&!flags(r).some(function(f){return f[0]==="r"||f[0]==="y"}))return false;
       if(q){var hay=[r.name,r.org,r.title,r.city,(r.coauthors||[]).join(" ")].map(str).join(" ").toLowerCase();if(hay.indexOf(q)<0)return false;}
       return true;});
     if(!reps.length){list.appendChild(h("div",{class:"empty",text:"Нет докладов по выбранному фильтру."}));return;}
@@ -236,7 +307,8 @@ function fmtShort(f){f=str(f);var o=[];if(/очно/.test(f)){var m=f.match(/Д�
 
 function card(r){
   var mm=myMark(r.key),ms=marksFor(r.key).filter(function(m){return m.uid!==S.me});
-  var el=h("article",{class:"card"+(mm?" "+mm.s:"")});
+  var dc=decOf(r.key);
+  var el=h("article",{class:"card"+(mm?" "+mm.s:"")+(dc&&dc.d?" dec":"")});
   el.appendChild(h("h3",{text:str(r.title)||"Без названия"}));
   var who=h("div",{class:"who"},h("b",{text:str(r.name)}));
   if(r.coauthors&&r.coauthors.length)who.appendChild(document.createTextNode(", соавт.: "+r.coauthors.map(str).join(", ")));
@@ -253,6 +325,10 @@ function card(r){
   if(r.pdf)el.appendChild(h("div",{class:"pdfrow"},
     h("a",{class:"btn ghost",href:"/files/"+r.key+".pdf",target:"_blank",rel:"noopener",text:"Открыть тезисы (PDF)"}),
     r.pages?h("span",{class:"org",text:r.pages+" "+(r.pages%10===1&&r.pages%100!==11?"страница":(r.pages%10>=2&&r.pages%10<=4&&(r.pages%100<10||r.pages%100>=20)?"страницы":"страниц"))}):null));
+  var fl=flags(r);
+  if(fl.length||(dc&&dc.d))el.appendChild(h("div",{class:"flags"},
+    dc&&dc.d?h("span",{class:"pill b",text:"Решение: "+DEC_SHORT[dc.d]+(dc.rev?(dc.revOk?", доработка принята":", доработка до 01.12"):"")}):null,
+    fl.map(function(f){return h("span",{class:"pill "+f[0],text:f[1]})})));
   if(r.problem)el.appendChild(h("details",null,h("summary",{text:"Какую проблему автор хочет решить с помощью ИИ"}),h("p",{text:str(r.problem)})));
   var dis=!S.me;
   var acts=h("div",{class:"actions"},["yes","maybe","no"].map(function(k){
@@ -265,7 +341,73 @@ function card(r){
     el.appendChild(ta);}
   if(ms.length){el.appendChild(h("div",{class:"others"},ms.map(function(m){
     return h("div",{class:"o"},h("span",{class:"pill "+STATCLS[m.s],text:STAT[m.s]}),h("span",{text:nameOf(m.uid)}),m.c?h("span",{class:"c",text:"«"+m.c+"»"}):null)})));}
+  var sec=secOf(r);
+  if(canDecide(sec))el.appendChild(decisionBlock(r));
   return el;
+}
+function decisionBlock(r){
+  var dc=decOf(r.key)||{},blocked=mine(r);
+  var box=h("div",{class:"decide"});
+  box.appendChild(h("div",{class:"lbl",text:blocked?"Решение куратора: по своей заявке решение принимает другой член оргкомитета":"Решение куратора (уходит в статус на портале и в программу)"}));
+  var sel=h("select",{disabled:blocked,onchange:function(e){sendDecision(r.key,{d:e.target.value||null}).then(render);}});
+  sel.appendChild(h("option",{value:"",text:"Решение не принято"}));
+  DEC_ORDER.forEach(function(k){var o=h("option",{value:k,text:str(S.labels.decisions[k])||k});if(dc.d===k)o.selected=true;sel.appendChild(o);});
+  var hint=null;
+  if(!dc.d){var sug=isDistant(r)?"oral_on":(isPoster(r)?"poster":"oral_off");hint=h("span",{class:"org",text:"по заявке: "+DEC_SHORT[sug]});}
+  box.appendChild(h("div",{class:"row"},sel,hint));
+  var rev=h("input",{type:"checkbox",disabled:blocked,onchange:function(e){sendDecision(r.key,{rev:e.target.checked,revOk:e.target.checked?!!dc.revOk:false}).then(render);}});rev.checked=!!dc.rev;
+  var ok=h("input",{type:"checkbox",disabled:blocked||!dc.rev,onchange:function(e){sendDecision(r.key,{revOk:e.target.checked}).then(render);}});ok.checked=!!dc.revOk;
+  var fact=h("select",{disabled:blocked||!dc.d,onchange:function(e){sendDecision(r.key,{fact:e.target.value||null}).then(render);}});
+  [["","После секции: не отмечено"],["spoke","Выступил"],["noshow","Не явился"]].forEach(function(o){var x=h("option",{value:o[0],text:o[1]});if((dc.fact||"")===o[0])x.selected=true;fact.appendChild(x);});
+  box.appendChild(h("div",{class:"row"},h("label",null,rev,"Нужна доработка до 01.12"),h("label",null,ok,"Исправленный файл проверен"),fact));
+  var note=h("input",{type:"text",disabled:blocked,placeholder:"Что доработать или комментарий для оргкомитета",value:str(dc.note)});
+  var t=null;note.addEventListener("input",function(){clearTimeout(t);dirty=true;t=setTimeout(function(){sendDecision(r.key,{note:note.value.slice(0,1000)});},700);});
+  box.appendChild(note);
+  return box;
+}
+function curatorPanel(s){
+  var c=sectionCounts(s),info=S.secinfo[String(s.num)]||{};
+  var p=h("section",{class:"panel"});
+  p.appendChild(h("h3",{text:"Панель куратора"}));
+  p.appendChild(h("div",{class:"meta"},
+    h("span",{class:"pill "+(c.oral>LIMIT.oral?"r":"g"),text:"устных "+c.oral+" из "+LIMIT.oral}),
+    s.num<=9?h("span",{class:"pill "+(c.poster>LIMIT.poster?"r":"g"),text:"постеров "+c.poster+" из "+LIMIT.poster}):null,
+    h("span",{class:"pill",text:"слушателей "+c.listen}),
+    h("span",{class:"pill "+(c.none?"y":"g"),text:"без решения "+c.none})));
+  function field(lbl,key,multi,ph){var el=multi?h("textarea",{placeholder:ph}):h("input",{type:"text",placeholder:ph});el.value=str(info[key]);
+    var t=null;el.addEventListener("input",function(){clearTimeout(t);dirty=true;t=setTimeout(saveInfo,800);});fields[key]=el;
+    return h("div",null,h("div",{class:"lbl",text:lbl}),el);}
+  var fields={};
+  function saveInfo(){var b={sec:s.num};for(var k in fields)b[k]=fields[k].value;S.secinfo[String(s.num)]=b;
+    api("PUT","/api/secinfo",b).then(function(){dirty=false;toast("Данные секции сохранены");},function(e){dirty=false;toast(e.message||"Не сохранилось");});}
+  p.appendChild(h("div",{class:"grid2"},
+    field("Время (по сетке: "+({1:"10:30–11:50",2:"10:30–11:50",3:"12:30–13:50",4:"12:30–13:50",5:"14:50–16:10",6:"14:50–16:10",7:"16:50–18:10",8:"16:50–18:10",9:"16:50–18:10"}[s.num]||"задать")+")","time",false,"например, 14:50–16:10"),
+    field("Зал","hall",false,"например, Зал Лекторий"),
+    field("Модератор (каждый с новой строки: ФИО, статус, место работы)","moderator",true,""),
+    field("Эксперты (каждый с новой строки)","experts",true,"")));
+  var acc=(s.reports||[]).filter(function(r){var d=decOf(r.key);return d&&(d.d==="oral_off"||d.d==="oral_on"||d.d==="poster");});
+  var ord=((S.order[String(s.num)]||{}).keys||[]).slice();
+  acc.sort(function(a,b){var ia=ord.indexOf(a.key),ib=ord.indexOf(b.key);ia=ia<0?1e6:ia;ib=ib<0?1e6:ib;
+    var pa=decOf(a.key).d==="poster"?1:0,pb=decOf(b.key).d==="poster"?1:0;
+    return pa-pb||ia-ib||countBy(marksFor(b.key),"yes")-countBy(marksFor(a.key),"yes");});
+  if(acc.length){
+    p.appendChild(h("div",{class:"lbl",text:"Порядок в программе: сильные доклады в начало и конец, близкие по теме рядом"}));
+    var ol=h("div",{class:"olist"});
+    acc.forEach(function(r,i){var d=decOf(r.key).d;
+      ol.appendChild(h("div",{class:"oitem"},h("span",{class:"no",text:(i+1)+"."}),
+        h("span",{class:"t"},h("b",{text:str(r.name)}),". "+str(r.title)),
+        h("span",{class:"pill "+(d==="poster"?"y":"b"),text:DEC_SHORT[d]}),
+        h("button",{class:"mv",title:"Выше",text:"↑",onclick:function(){move(i,-1)}}),
+        h("button",{class:"mv",title:"Ниже",text:"↓",onclick:function(){move(i,1)}})));});
+    p.appendChild(ol);
+    function move(i,dlt){var j=i+dlt;if(j<0||j>=acc.length)return;var keys=acc.map(function(r){return r.key});var x=keys[i];keys[i]=keys[j];keys[j]=x;
+      S.order[String(s.num)]={keys:keys};render();
+      api("PUT","/api/order",{sec:s.num,keys:keys}).then(function(){},function(e){toast(e.message||"Порядок не сохранился");});}
+  }
+  p.appendChild(h("div",{class:"row",style:"display:flex;gap:10px;flex-wrap:wrap"},
+    h("a",{class:"btn",href:"/api/program.docx?sec="+s.num,text:"Скачать программу секции (Word)"}),
+    h("span",{class:"legend",text:"Программа собирается по шаблону из инструкции: устные доклады, затем постеры, в заданном порядке."})));
+  return p;
 }
 
 function renderSummary(v){
@@ -295,6 +437,38 @@ function renderSummary(v){
     v.appendChild(h("table",null,h("thead",null,h("tr",null,h("th",{text:"Доклад"}),h("th",{text:"Выбран"}),h("th",{text:"Под вопросом"}),h("th",{text:"Не подходит"}),h("th",{text:"Кто выбрал"}),h("th",{text:"Комментарии"}))),tb));
   });
   if(!any)v.appendChild(h("div",{class:"empty",text:"Отметок пока нет."}));
+  if(isCurator())renderPortal(v);
+}
+// сверка для портала: один статус на заявку (у автора может быть два доклада в разных секциях)
+function renderPortal(v){
+  v.appendChild(h("h2",{text:"Статусы для портала «Ломоносов»"}));
+  var rids={};allReports().forEach(function(r){if(S.admin||S.secs.indexOf(secOf(r))>=0)(rids[r.rid]=rids[r.rid]||[]).push(r);});
+  var list=Object.keys(rids).map(function(rid){var reps=rids[rid];
+    var st=reps.map(function(r){return portalStatus(r.key)}).filter(Boolean);
+    var uniq=st.filter(function(x,i){return st.indexOf(x)===i});
+    var issues=[];
+    reps.forEach(function(r){if(!decOf(r.key)||!decOf(r.key).d)issues.push("секция "+secOf(r)+": нет решения");
+      // объём считается по PDF приблизительно: после решения куратора он не мешает переносу статуса
+      flags(r).forEach(function(f){if(f[0]==="r"&&!/знаков/.test(f[1]))issues.push(f[1]);});});
+    if(uniq.length>1)issues.push("разные решения в двух секциях: согласовать один статус");
+    return {rid:rid,r:reps[0],reps:reps,status:uniq.length===1?uniq[0]:"",issues:issues};})
+    .sort(function(a,b){return str(a.r.name).localeCompare(str(b.r.name),"ru")});
+  var ready=list.filter(function(x){return x.status&&!x.issues.length}).length;
+  var rows=list.map(function(x){return [x.rid,str(x.r.name),x.reps.map(secOf).join(", "),x.reps.map(function(r){return str(r.title)}).join(" | "),x.status,x.issues.join("; ")]});
+  v.appendChild(h("div",{class:"tools"},
+    h("span",{class:"pill g",text:"готово к переносу: "+ready}),h("span",{class:"pill y",text:"требует внимания: "+(list.length-ready)}),
+    h("button",{class:"btn",text:"Скопировать сверку",onclick:function(){copyRows(["Заявка №","Автор","Секции","Доклад","Статус для портала","Замечания"],rows)}}),
+    S.admin?h("a",{class:"btn ghost",href:"/api/program.docx?sec=all",text:"Программа всех секций (Word)"}):null));
+  var tb=h("tbody");
+  list.forEach(function(x){tb.appendChild(h("tr",null,h("td",{class:"n",text:x.rid}),
+    h("td",null,h("div",{style:"font-weight:500",text:str(x.r.name)}),h("div",{class:"org",text:"секция "+x.reps.map(secOf).join(", ")})),
+    h("td",null,x.status?h("span",{class:"pill "+(x.issues.length?"y":"g"),text:x.status}):h("span",{class:"pill",text:"нет"})),
+    h("td",{class:"org",text:x.issues.join("; ")})));});
+  v.appendChild(h("table",null,h("thead",null,h("tr",null,h("th",{text:"Заявка"}),h("th",{text:"Автор"}),h("th",{text:"Статус для портала"}),h("th",{text:"Что проверить"}))),tb));
+}
+function copyRows(head,rows){
+  var t=[head].concat(rows).map(function(r){return r.map(function(c){return String(c).replace(/[\t\r\n]+/g," ")}).join("\t")}).join("\n");
+  try{navigator.clipboard.writeText(t).then(function(){toast("Таблица скопирована")},function(){toast("Браузер не дал доступа к буферу обмена")});}catch(e){toast("Браузер не дал доступа к буферу обмена");}
 }
 function copyTSV(rows){
   var head=["Секция №","Секция","Автор","Соавторы","Вуз","Название доклада","Формат","Выбран","Под вопросом","Не подходит","Кто выбрал","Комментарии","Заявка №"];
@@ -330,24 +504,26 @@ function applyMarks(j){
   lastVersion=j.version;var m={},names={};
   Object.keys(j.experts||{}).forEach(function(id){var e=j.experts[id];m[id]=e.picks||{};names[id]=str(e.name)||"Эксперт";});
   S.marks=m;S.names=names;
+  if(!dirty){S.dec=j.decisions||{};S.order=j.order||{};S.secinfo=j.secinfo||{};}
+  if(j.labels)S.labels=j.labels;
   if(S.me&&!dirty){var mine=m[S.me]||{};myPicks=JSON.parse(JSON.stringify(mine));}
   S.loaded.marks=true;return true;
 }
 function poll(){
   api("GET","/api/marks"+(lastVersion!=null?"?v="+lastVersion:"")).then(function(j){
-    if(applyMarks(j)){var a=document.activeElement;if(!(a&&(a.tagName==="TEXTAREA"||a.tagName==="INPUT")))render();}
+    if(applyMarks(j)){var a=document.activeElement;if(!(a&&(a.tagName==="TEXTAREA"||a.tagName==="INPUT"||a.tagName==="SELECT")))render();}
     setStatus(S.statusText,false);
   },function(e){if(e.message!=="auth")setStatus("Нет связи с сервером, отметки других экспертов могут быть неактуальны.",true);});
 }
 function start(){
   Promise.all([api("GET","/api/me"),api("GET","/api/sections"),api("GET","/api/marks")]).then(function(r){
-    var me=r[0];S.me=me.id;S.myName=str(me.name);
+    var me=r[0];S.me=me.id;S.myName=str(me.name);S.admin=!!me.admin;S.secs=Array.isArray(me.secs)?me.secs:[];
     S.sections=(Array.isArray(r[1])?r[1]:[]).filter(function(x){return x&&typeof x.num==="number"}).sort(function(a,b){return a.num-b.num});
     S.loaded.sec=true;applyMarks(r[2]);
     S.statusText=me.storage==="github"?"Отметки сохраняются автоматически и видны другим экспертам.":"Внимание: постоянное хранилище не настроено, отметки пропадут при перезапуске сервера.";
     setStatus(S.statusText,me.storage!=="github");
     var who=document.getElementById("who");who.textContent="";
-    who.appendChild(h("span",{text:S.myName}));
+    who.appendChild(h("span",{text:S.myName+(S.admin?" · оператор":(S.secs.length?" · куратор секции "+S.secs.join(", "):""))}));
     who.appendChild(h("button",{class:"back",text:"Выйти",onclick:function(){api("POST","/api/logout").then(function(){location.href="/login";},function(){location.href="/login";});}}));
     render();
     setInterval(function(){if(!document.hidden)poll();},8000);
