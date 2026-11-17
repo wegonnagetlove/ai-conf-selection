@@ -141,7 +141,7 @@ td.n{white-space:nowrap;text-align:center}
 (function(){
 "use strict";
 var S={sections:[],marks:{},me:null,canWrite:null,readOnly:false,names:{},filter:"all",q:"",loaded:{sec:false,marks:false},
-  admin:false,secs:[],dec:{},order:{},secinfo:{},labels:{decisions:{},none:"Новая"}};
+  admin:false,secs:[],observer:false,reviewSecs:[],dec:{},order:{},secinfo:{},labels:{decisions:{},none:"Новая"}};
 var DEC_ORDER=["review","oral_off","oral_on","poster","listen_off","listen_on","reject"];
 var DEC_SHORT={review:"на рассмотрении",oral_off:"устный очно",oral_on:"устный онлайн",poster:"постер",listen_off:"слушатель очно",listen_on:"слушатель онлайн",reject:"отклонена"};
 var FINAL={oral_off:1,oral_on:1,poster:1,listen_off:1,listen_on:1,reject:1};
@@ -176,6 +176,7 @@ function nameOf(uid){if(uid===S.me)return "Вы";return S.names[uid]||"Эксп�
 
 /* ---------- решения кураторов и проверки ---------- */
 function canDecide(sec){return S.admin||S.secs.indexOf(sec)>=0;}
+function canReview(sec){return !S.observer&&(S.admin||(S.reviewSecs.length?S.reviewSecs.indexOf(sec)>=0:(!S.secs.length||S.secs.indexOf(sec)>=0)));}
 function isCurator(){return S.admin||S.secs.length>0;}
 function personKey(n){var w=str(n).replace(/ё/gi,"е").replace(/[.,]/g," ").trim().split(/\s+/).filter(Boolean);
   if(!w.length)return "";return (w[0]+" "+w.slice(1,3).map(function(x){return x[0]}).join("")).toLowerCase();}
@@ -279,7 +280,7 @@ function renderSection(v,s){
     h("div",null,h("h2",{text:str(s.name)}),h("div",{class:"site",text:str(s.site)}))));
   var search=h("input",{class:"search",type:"search",placeholder:"Поиск по ФИО, вузу, названию доклада",value:S.q,
     oninput:function(e){S.q=e.target.value;drawList();}});
-  var F=[["all","Все"],["todo","Не оценены мной"],["mineyes","Выбраны мной"],["anyyes","Выбраны кем-либо"],["maybe","Под вопросом"],["pages","Больше 2 страниц"]];
+  var F=S.observer?[["all","Все"],["anyyes","Выбраны кем-либо"],["maybe","Под вопросом"],["pages","Больше 2 страниц"]]:[["all","Все"],["todo","Не оценены мной"],["mineyes","Выбраны мной"],["anyyes","Выбраны кем-либо"],["maybe","Под вопросом"],["pages","Больше 2 страниц"]];
   if(canDecide(s.num))F=F.concat([["nodec","Без решения куратора"],["flag","С пометками"]]);
   var seg=h("div",{class:"seg"},F.map(function(f){return h("button",{class:S.filter===f[0]?"on":"",text:f[1],onclick:function(){S.filter=f[0];render();}})}));
   if(canDecide(s.num))v.appendChild(curatorPanel(s));
@@ -332,7 +333,7 @@ function card(r){
     dc&&dc.d?h("span",{class:"pill b",text:"Решение: "+DEC_SHORT[dc.d]+(dc.rev?", доработка до 01.12":"")}):null,
     fl.map(function(f){return h("span",{class:"pill "+f[0],text:f[1]})})));
   if(r.problem)el.appendChild(h("details",null,h("summary",{text:"Какую проблему автор хочет решить с помощью ИИ"}),h("p",{text:str(r.problem)})));
-  var dis=!S.me;
+  var dis=!S.me||!canReview(secOf(r));
   var acts=h("div",{class:"actions"},["yes","maybe","no"].map(function(k){
     return h("button",{class:"act "+k+(mm&&mm.s===k?" on":""),disabled:dis,text:k==="yes"?"Выбрать":STAT[k],
       onclick:function(){setPick(r.key,mm&&mm.s===k?null:k);render();}})}));
@@ -533,13 +534,13 @@ function poll(){
 }
 function start(){
   Promise.all([api("GET","/api/me"),api("GET","/api/sections"),api("GET","/api/marks")]).then(function(r){
-    var me=r[0];S.me=me.id;S.myName=str(me.name);S.admin=!!me.admin;S.secs=Array.isArray(me.secs)?me.secs:[];
+    var me=r[0];S.me=me.id;S.myName=str(me.name);S.admin=!!me.admin;S.secs=Array.isArray(me.secs)?me.secs:[];S.observer=!!me.observer;S.reviewSecs=Array.isArray(me.reviewSecs)?me.reviewSecs:[];
     S.sections=(Array.isArray(r[1])?r[1]:[]).filter(function(x){return x&&typeof x.num==="number"}).sort(function(a,b){return a.num-b.num});
     S.loaded.sec=true;applyMarks(r[2]);
     S.statusText=me.storage==="github"?"Отметки сохраняются автоматически и видны другим экспертам.":"Внимание: постоянное хранилище не настроено, отметки пропадут при перезапуске сервера.";
     setStatus(S.statusText,me.storage!=="github");
     var who=document.getElementById("who");who.textContent="";
-    who.appendChild(h("span",{text:S.myName+(S.admin?" · оператор":(S.secs.length?" · куратор секции "+S.secs.join(", "):""))}));
+    who.appendChild(h("span",{text:S.myName+(S.admin?" · оператор":(S.observer?" · наблюдатель (только просмотр)":(S.reviewSecs.length?" · помощник, секция "+S.reviewSecs.join(", "):(S.secs.length?" · куратор секции "+S.secs.join(", "):""))))}));
     who.appendChild(h("button",{class:"back",text:"Выйти",onclick:function(){api("POST","/api/logout").then(function(){location.href="/login";},function(){location.href="/login";});}}));
     render();
     setInterval(function(){if(!document.hidden)poll();},8000);
