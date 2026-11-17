@@ -10,7 +10,8 @@ const GRID = { 1: "10:30–11:50", 2: "10:30–11:50", 3: "12:30–13:50", 4: "1
 const DATE = "8 декабря 2026";
 const TIMING = "Тайминг доклада с презентацией: 7 минут (до 3 минут на вопросы)";
 
-const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+// управляющие символы (бывают в выгрузке из Excel) делают XML недопустимым и Word не открывает файл
+const esc = (s) => String(s == null ? "" : s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, " ").replace(/[\r\n\t]+/g, " ").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const lines = (s) => String(s || "").split(/\r?\n/).map((x) => x.replace(/^[\s•\-–—]+/, "").trim()).filter(Boolean);
 
 function run(text, o = {}) {
@@ -117,19 +118,24 @@ const DOC_RELS = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relati
 /* ---------- zip ---------- */
 const CRC = (() => { const t = new Int32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c; } return t; })();
 function crc32(buf) { let c = -1; for (let i = 0; i < buf.length; i++) c = CRC[(c ^ buf[i]) & 0xff] ^ (c >>> 8); return (c ^ -1) >>> 0; }
+function dosDateTime(d = new Date()) {
+  return { time: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1),
+    date: ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate() };
+}
 function zip(files) {
   const local = [], central = []; let offset = 0;
+  const dt = dosDateTime();
   for (const [name, content] of files) {
     const nameBuf = Buffer.from(name, "utf8"), data = Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8");
     const comp = zlib.deflateRawSync(data), crc = crc32(data);
     const h = Buffer.alloc(30);
     h.writeUInt32LE(0x04034b50, 0); h.writeUInt16LE(20, 4); h.writeUInt16LE(0x0800, 6); h.writeUInt16LE(8, 8);
-    h.writeUInt32LE(0, 10); h.writeUInt32LE(crc, 14); h.writeUInt32LE(comp.length, 18); h.writeUInt32LE(data.length, 22);
+    h.writeUInt16LE(dt.time, 10); h.writeUInt16LE(dt.date, 12); h.writeUInt32LE(crc, 14); h.writeUInt32LE(comp.length, 18); h.writeUInt32LE(data.length, 22);
     h.writeUInt16LE(nameBuf.length, 26); h.writeUInt16LE(0, 28);
     local.push(h, nameBuf, comp);
     const c = Buffer.alloc(46);
     c.writeUInt32LE(0x02014b50, 0); c.writeUInt16LE(20, 4); c.writeUInt16LE(20, 6); c.writeUInt16LE(0x0800, 8); c.writeUInt16LE(8, 10);
-    c.writeUInt32LE(0, 12); c.writeUInt32LE(crc, 16); c.writeUInt32LE(comp.length, 20); c.writeUInt32LE(data.length, 24);
+    c.writeUInt16LE(dt.time, 12); c.writeUInt16LE(dt.date, 14); c.writeUInt32LE(crc, 16); c.writeUInt32LE(comp.length, 20); c.writeUInt32LE(data.length, 24);
     c.writeUInt16LE(nameBuf.length, 28); c.writeUInt32LE(offset, 42);
     central.push(c, nameBuf);
     offset += h.length + nameBuf.length + comp.length;

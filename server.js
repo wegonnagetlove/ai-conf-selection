@@ -95,13 +95,16 @@ function cookie(res, value, maxAge) {
 }
 
 /* ---------- ограничение попыток входа ---------- */
+// считаются только неудачные попытки: удачные входы экспертов из одной сети не блокируют друг друга
 const attempts = new Map();
-function tooMany(ip) {
+function attemptsOf(ip) {
   const now = Date.now(), a = attempts.get(ip) || { n: 0, t: now };
   if (now - a.t > 15 * 60e3) { a.n = 0; a.t = now; }
-  a.n++; attempts.set(ip, a);
-  return a.n > 20;
+  attempts.set(ip, a);
+  return a;
 }
+function tooMany(ip) { return attemptsOf(ip).n >= 20; }
+function failed(ip) { attemptsOf(ip).n++; }
 
 /* ---------- отметки ---------- */
 // state.experts[id] = { name, picks: { "<заявка>-<1|2>": { s: "yes"|"maybe"|"no"|null, c: "", t: ms } } }
@@ -236,7 +239,14 @@ setInterval(async () => {
   if (!GH_TOKEN || dirty || saving) return;
   try { const before = JSON.stringify(state); mergeInto(state, await fetchRemote()); if (JSON.stringify(state) !== before) version++; } catch (e) { console.error(e.message); }
 }, 60e3).unref();
-async function shutdown() { clearTimeout(saveTimer); try { await save(); } finally { process.exit(0); } }
+// при остановке дожидаемся текущей записи и сохраняем несохранённое, иначе последние отметки теряются
+async function shutdown() {
+  clearTimeout(saveTimer);
+  try {
+    for (let i = 0; i < 50 && saving; i++) await new Promise((r) => setTimeout(r, 200));
+    await save();
+  } finally { process.exit(0); }
+}
 process.on("SIGTERM", shutdown); process.on("SIGINT", shutdown);
 
 /* ---------- HTTP ---------- */
@@ -291,9 +301,11 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("X-Frame-Options", "DENY");
   const url = new URL(req.url, "http://x");
   const p = url.pathname;
-  const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+  // прокси платформы дописывает адрес клиента в конец X-Forwarded-For, первые элементы клиент может подделать
+  const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",").pop().trim();
   try {
     if (p === "/healthz") return send(res, 200, "ok", "text/plain");
+    if (p === "/favicon.ico") { res.writeHead(204); return res.end(); }
     if (p === "/robots.txt") return send(res, 200, "User-agent: *\nDisallow: /\n", "text/plain");
     if (p === "/login") return send(res, 200, file("login.html"), "text/html; charset=utf-8");
     if (p === "/api/login" && req.method === "POST") {
@@ -301,7 +313,7 @@ const server = http.createServer(async (req, res) => {
       if (tooMany(ip)) return send(res, 429, { error: "Слишком много попыток. Попробуйте через 15 минут." });
       const b = await readBody(req);
       const e = findExpert(String(b.code || "").trim());
-      if (!e) return send(res, 401, { error: "Код не подошёл" });
+      if (!e) { failed(ip); return send(res, 401, { error: "Код не подошёл" }); }
       if (!state.experts[e.id]) state.experts[e.id] = { name: e.name, picks: {} };
       cookie(res, makeSession(e.id), SESSION_DAYS * 86400);
       return send(res, 200, { ok: true });
