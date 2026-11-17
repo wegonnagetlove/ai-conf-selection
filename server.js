@@ -14,7 +14,7 @@
  *   MARKS_PATH      файл с отметками в этой ветке, по умолчанию marks.json
  */
 const http = require("node:http");
-const { programDocx } = require("./program");
+const { programDocx, zip } = require("./program");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
@@ -105,7 +105,7 @@ function tooMany(ip) {
 
 /* ---------- отметки ---------- */
 // state.experts[id] = { name, picks: { "<заявка>-<1|2>": { s: "yes"|"maybe"|"no"|null, c: "", t: ms } } }
-// state.decisions["<заявка>-<1|2>"] = { d, rev, revOk, fact, note, by, t }  решение куратора
+// state.decisions["<заявка>-<1|2>"] = { d, rev, note, by, t }  решение куратора (rev: дано время на доработку до 01.12)
 // state.order["<секция>"] = { keys: [...], t }                         порядок докладов в программе
 // state.secinfo["<секция>"] = { time, hall, moderator, experts, t }     шапка программы секции
 let state = { experts: {}, decisions: {}, order: {}, secinfo: {} };
@@ -113,17 +113,18 @@ let version = 0;
 let remoteSha = null;
 let dirty = false, saving = false, saveTimer = null;
 const STATUSES = new Set(["yes", "maybe", "no"]);
-// решения куратора и соответствующие статусы на портале «Ломоносов»
+// решения куратора = статусы заявки на портале «Ломоносов» (перечень согласован 16.11.2026)
+// без решения заявка остаётся в статусе «Новая»
+const NEW_STATUS = "Новая";
 const DECISIONS = {
-  oral_off: "Одобрено: устный доклад (очно)",
-  oral_on: "Одобрено: устный доклад (онлайн)",
-  poster: "Одобрено: постер (очно)",
-  listen_off: "Одобрено: очный участник-слушатель",
-  listen_on: "Одобрено: онлайн участник-слушатель",
-  revise: "Требуется доработка (до 01.12)",
-  reject: "Отклонено",
+  review: "На рассмотрении",
+  oral_off: "Принята: устный доклад (очно)",
+  oral_on: "Принята: устный доклад (онлайн)",
+  poster: "Принята: постер (только для очных)",
+  listen_off: "Принята: очный участник-слушатель",
+  listen_on: "Принята: онлайн участник-слушатель",
+  reject: "Отклонена",
 };
-const FACTS = { spoke: "Выступил", noshow: "Не явился" };
 const KEY_RE = /^\d{1,12}-[12]$/;
 const clip = (x, n) => String(x == null ? "" : x).slice(0, n);
 
@@ -155,11 +156,12 @@ function mergeInto(base, other) {
 }
 
 function cleanDecision(b, by, t) {
+  let d = b.d, rev = !!b.rev;
+  // старый статус «Требуется доработка» убран: такие заявки переходят в «На рассмотрении» с пометкой о доработке
+  if (d === "revise") { d = "review"; rev = true; }
   return {
-    d: Object.prototype.hasOwnProperty.call(DECISIONS, b.d) ? b.d : null,
-    rev: !!b.rev, revOk: !!b.revOk,
-    fact: Object.prototype.hasOwnProperty.call(FACTS, b.fact) ? b.fact : null,
-    note: clip(b.note, 1000), by: clip(by, 40), t,
+    d: Object.prototype.hasOwnProperty.call(DECISIONS, d) ? d : null,
+    rev, note: clip(b.note, 1000), by: clip(by, 40), t,
   };
 }
 function cleanSecinfo(b, t) {
@@ -279,7 +281,7 @@ function publicMarks() {
     for (const [k, p] of Object.entries(e.picks || {})) if (p && p.s) picks[k] = { s: p.s, c: p.c || "" };
     ex[id] = { name: (EXPERTS_BY_ID.get(id) || {}).name || e.name || "Эксперт", picks };
   }
-  return { version, experts: ex, decisions: state.decisions || {}, order: state.order || {}, secinfo: state.secinfo || {}, labels: { decisions: DECISIONS, facts: FACTS } };
+  return { version, experts: ex, decisions: state.decisions || {}, order: state.order || {}, secinfo: state.secinfo || {}, labels: { decisions: DECISIONS, none: NEW_STATUS } };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -367,6 +369,19 @@ const server = http.createServer(async (req, res) => {
       state.secinfo[String(sec)] = cleanSecinfo(b, Date.now());
       version++; scheduleSave();
       return send(res, 200, { ok: true, version });
+    }
+    // для оператора: программы всех секций отдельными файлами Word в одном архиве (для рассылки кураторам)
+    if (p === "/api/programs.zip" && req.method === "GET") {
+      if (!me.admin) return send(res, 403, { error: "Архив программ скачивает оператор" });
+      const files = JSON.parse(sections()).map((s) => [
+        "Программа секции " + String(s.num).padStart(2, "0") + ".docx", programDocx([s], state),
+      ]);
+      res.writeHead(200, {
+        "Content-Type": "application/zip",
+        "Content-Disposition": "attachment; filename*=UTF-8''" + encodeURIComponent("Программы секций.zip"),
+        "Cache-Control": "no-store",
+      });
+      return res.end(zip(files));
     }
     if (p === "/api/program.docx" && req.method === "GET") {
       const want = url.searchParams.get("sec");

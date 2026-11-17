@@ -120,7 +120,7 @@ function crc32(buf) { let c = -1; for (let i = 0; i < buf.length; i++) c = CRC[(
 function zip(files) {
   const local = [], central = []; let offset = 0;
   for (const [name, content] of files) {
-    const nameBuf = Buffer.from(name, "utf8"), data = Buffer.from(content, "utf8");
+    const nameBuf = Buffer.from(name, "utf8"), data = Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8");
     const comp = zlib.deflateRawSync(data), crc = crc32(data);
     const h = Buffer.alloc(30);
     h.writeUInt32LE(0x04034b50, 0); h.writeUInt16LE(20, 4); h.writeUInt16LE(0x0800, 6); h.writeUInt16LE(8, 8);
@@ -150,4 +150,4 @@ function programDocx(secs, state) {
   ]);
 }
 
-module.exports = { programDocx, GRID };
+module.exports = { programDocx, zip, GRID };
