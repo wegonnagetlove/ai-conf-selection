@@ -46,17 +46,26 @@ function parseExperts(raw) {
     if (!name) name = "*Админ";
     if (code.length < 4) { console.warn("EXPERTS: пропущена запись «" + name + "»: код короче 4 символов"); return; }
     // префиксы в любом порядке: "*" администратор (оператор), "#6,7" куратор секций 6 и 7
-    let admin = false; const secs = [];
+    let admin = false, observer = false; const secs = []; let reviewSecs = [];
     for (;;) {
       name = name.trim();
       if (name.startsWith("*")) { admin = true; name = name.slice(1); continue; }
+      if (name.startsWith("!")) { observer = true; name = name.slice(1); continue; }
+      const helper = /^\+\s*(\d{1,2}(?:\s*,\s*\d{1,2})*)/.exec(name);
+      if (helper) { reviewSecs = helper[1].split(",").map(Number); name = name.slice(helper[0].length); continue; }
       const m = /^#\s*(\d{1,2}(?:\s*,\s*\d{1,2})*)/.exec(name);
       if (m) { m[1].split(",").forEach((x) => secs.push(Number(x))); name = name.slice(m[0].length); continue; }
       break;
     }
     name = name.trim() || "Админ";
+    // Совместимость с уже внесённой настройкой EXPERTS, где трое пользователей были без префикса роли.
+    // После переноса на префиксы +11 и ! эти исключения можно удалить.
+    if (!admin && !observer && !secs.length && !reviewSecs.length) {
+      if (name === "Игнатова Валерия Александровна") reviewSecs = [11];
+      if (name === "Толчина Мария Сергеевна" || name === "Бутылкина Ксения Дмитриевна") observer = true;
+    }
     const id = "e" + crypto.createHash("sha256").update(name).digest("hex").slice(0, 12);
-    out.set(code, { id, name, admin, secs });
+    out.set(code, { id, name, admin, secs, observer, reviewSecs });
   });
   return out;
 }
@@ -283,6 +292,12 @@ function conflict(me, r) {
   return !!k && [r.name, ...(r.coauthors || [])].some((n) => personKey(n) === k);
 }
 function canDecide(me, r) { return !!r && (me.admin || (me.secs || []).includes(r.sec)); }
+function canReview(me, r) {
+  if (!r || me.observer) return false;
+  if (me.admin) return true;
+  if ((me.reviewSecs || []).length) return me.reviewSecs.includes(r.sec);
+  return !(me.secs || []).length || me.secs.includes(r.sec);
+}
 
 function publicMarks() {
   const ex = {};
@@ -326,7 +341,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(302, { Location: "/login", "Cache-Control": "no-store" }); return res.end();
     }
     if (p === "/" || p === "/index.html") return send(res, 200, file("index.html"), "text/html; charset=utf-8");
-    if (p === "/api/me") return send(res, 200, { id: me.id, name: me.name, admin: me.admin, secs: me.secs || [], storage: GH_TOKEN ? "github" : "memory" });
+    if (p === "/api/me") return send(res, 200, { id: me.id, name: me.name, admin: me.admin, secs: me.secs || [], observer: !!me.observer, reviewSecs: me.reviewSecs || [], storage: GH_TOKEN ? "github" : "memory" });
     if (p === "/api/sections") return send(res, 200, sections());
     const pdf = p.match(/^\/files\/(\d{1,12}-[12])\.pdf$/);
     if (pdf) {
@@ -347,6 +362,9 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       const key = String(b.key || "");
       if (!/^\d{1,12}-[12]$/.test(key)) return send(res, 400, { error: "bad key" });
+      const r = reports().get(key);
+      if (!r) return send(res, 400, { error: "Нет такого доклада" });
+      if (!canReview(me, r)) return send(res, 403, { error: "У вас нет права оценивать доклады этой секции" });
       const s = b.s == null ? null : String(b.s);
       if (s !== null && !STATUSES.has(s)) return send(res, 400, { error: "bad status" });
       const ex = state.experts[me.id] || (state.experts[me.id] = { name: me.name, picks: {} });
