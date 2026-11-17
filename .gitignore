@@ -3,3 +3,4 @@
 rows.json
 data.json
 .marks.local.json
+__pycache__/

@@ -14,7 +14,7 @@
  *   MARKS_PATH      файл с отметками в этой ветке, по умолчанию marks.json
  */
 const http = require("node:http");
-const { programDocx } = require("./program");
+const { programDocx, zip } = require("./program");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
@@ -95,17 +95,20 @@ function cookie(res, value, maxAge) {
 }
 
 /* ---------- ограничение попыток входа ---------- */
+// считаются только неудачные попытки: удачные входы экспертов из одной сети не блокируют друг друга
 const attempts = new Map();
-function tooMany(ip) {
+function attemptsOf(ip) {
   const now = Date.now(), a = attempts.get(ip) || { n: 0, t: now };
   if (now - a.t > 15 * 60e3) { a.n = 0; a.t = now; }
-  a.n++; attempts.set(ip, a);
-  return a.n > 20;
+  attempts.set(ip, a);
+  return a;
 }
+function tooMany(ip) { return attemptsOf(ip).n >= 20; }
+function failed(ip) { attemptsOf(ip).n++; }
 
 /* ---------- отметки ---------- */
 // state.experts[id] = { name, picks: { "<заявка>-<1|2>": { s: "yes"|"maybe"|"no"|null, c: "", t: ms } } }
-// state.decisions["<заявка>-<1|2>"] = { d, rev, revOk, fact, note, by, t }  решение куратора
+// state.decisions["<заявка>-<1|2>"] = { d, rev, note, by, t }  решение куратора (rev: дано время на доработку до 01.12)
 // state.order["<секция>"] = { keys: [...], t }                         порядок докладов в программе
 // state.secinfo["<секция>"] = { time, hall, moderator, experts, t }     шапка программы секции
 let state = { experts: {}, decisions: {}, order: {}, secinfo: {} };
@@ -113,17 +116,18 @@ let version = 0;
 let remoteSha = null;
 let dirty = false, saving = false, saveTimer = null;
 const STATUSES = new Set(["yes", "maybe", "no"]);
-// решения куратора и соответствующие статусы на портале «Ломоносов»
+// решения куратора = статусы заявки на портале «Ломоносов» (перечень согласован 16.11.2026)
+// без решения заявка остаётся в статусе «Новая»
+const NEW_STATUS = "Новая";
 const DECISIONS = {
-  oral_off: "Одобрено: устный доклад (очно)",
-  oral_on: "Одобрено: устный доклад (онлайн)",
-  poster: "Одобрено: постер (очно)",
-  listen_off: "Одобрено: очный участник-слушатель",
-  listen_on: "Одобрено: онлайн участник-слушатель",
-  revise: "Требуется доработка (до 01.12)",
-  reject: "Отклонено",
+  review: "На рассмотрении",
+  oral_off: "Принята: устный доклад (очно)",
+  oral_on: "Принята: устный доклад (онлайн)",
+  poster: "Принята: постер (только для очных)",
+  listen_off: "Принята: очный участник-слушатель",
+  listen_on: "Принята: онлайн участник-слушатель",
+  reject: "Отклонена",
 };
-const FACTS = { spoke: "Выступил", noshow: "Не явился" };
 const KEY_RE = /^\d{1,12}-[12]$/;
 const clip = (x, n) => String(x == null ? "" : x).slice(0, n);
 
@@ -155,11 +159,12 @@ function mergeInto(base, other) {
 }
 
 function cleanDecision(b, by, t) {
+  let d = b.d, rev = !!b.rev;
+  // старый статус «Требуется доработка» убран: такие заявки переходят в «На рассмотрении» с пометкой о доработке
+  if (d === "revise") { d = "review"; rev = true; }
   return {
-    d: Object.prototype.hasOwnProperty.call(DECISIONS, b.d) ? b.d : null,
-    rev: !!b.rev, revOk: !!b.revOk,
-    fact: Object.prototype.hasOwnProperty.call(FACTS, b.fact) ? b.fact : null,
-    note: clip(b.note, 1000), by: clip(by, 40), t,
+    d: Object.prototype.hasOwnProperty.call(DECISIONS, d) ? d : null,
+    rev, note: clip(b.note, 1000), by: clip(by, 40), t,
   };
 }
 function cleanSecinfo(b, t) {
@@ -234,7 +239,14 @@ setInterval(async () => {
   if (!GH_TOKEN || dirty || saving) return;
   try { const before = JSON.stringify(state); mergeInto(state, await fetchRemote()); if (JSON.stringify(state) !== before) version++; } catch (e) { console.error(e.message); }
 }, 60e3).unref();
-async function shutdown() { clearTimeout(saveTimer); try { await save(); } finally { process.exit(0); } }
+// при остановке дожидаемся текущей записи и сохраняем несохранённое, иначе последние отметки теряются
+async function shutdown() {
+  clearTimeout(saveTimer);
+  try {
+    for (let i = 0; i < 50 && saving; i++) await new Promise((r) => setTimeout(r, 200));
+    await save();
+  } finally { process.exit(0); }
+}
 process.on("SIGTERM", shutdown); process.on("SIGINT", shutdown);
 
 /* ---------- HTTP ---------- */
@@ -279,7 +291,7 @@ function publicMarks() {
     for (const [k, p] of Object.entries(e.picks || {})) if (p && p.s) picks[k] = { s: p.s, c: p.c || "" };
     ex[id] = { name: (EXPERTS_BY_ID.get(id) || {}).name || e.name || "Эксперт", picks };
   }
-  return { version, experts: ex, decisions: state.decisions || {}, order: state.order || {}, secinfo: state.secinfo || {}, labels: { decisions: DECISIONS, facts: FACTS } };
+  return { version, experts: ex, decisions: state.decisions || {}, order: state.order || {}, secinfo: state.secinfo || {}, labels: { decisions: DECISIONS, none: NEW_STATUS } };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -289,9 +301,11 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("X-Frame-Options", "DENY");
   const url = new URL(req.url, "http://x");
   const p = url.pathname;
-  const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+  // прокси платформы дописывает адрес клиента в конец X-Forwarded-For, первые элементы клиент может подделать
+  const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",").pop().trim();
   try {
     if (p === "/healthz") return send(res, 200, "ok", "text/plain");
+    if (p === "/favicon.ico") { res.writeHead(204); return res.end(); }
     if (p === "/robots.txt") return send(res, 200, "User-agent: *\nDisallow: /\n", "text/plain");
     if (p === "/login") return send(res, 200, file("login.html"), "text/html; charset=utf-8");
     if (p === "/api/login" && req.method === "POST") {
@@ -299,7 +313,7 @@ const server = http.createServer(async (req, res) => {
       if (tooMany(ip)) return send(res, 429, { error: "Слишком много попыток. Попробуйте через 15 минут." });
       const b = await readBody(req);
       const e = findExpert(String(b.code || "").trim());
-      if (!e) return send(res, 401, { error: "Код не подошёл" });
+      if (!e) { failed(ip); return send(res, 401, { error: "Код не подошёл" }); }
       if (!state.experts[e.id]) state.experts[e.id] = { name: e.name, picks: {} };
       cookie(res, makeSession(e.id), SESSION_DAYS * 86400);
       return send(res, 200, { ok: true });
@@ -367,6 +381,19 @@ const server = http.createServer(async (req, res) => {
       state.secinfo[String(sec)] = cleanSecinfo(b, Date.now());
       version++; scheduleSave();
       return send(res, 200, { ok: true, version });
+    }
+    // для оператора: программы всех секций отдельными файлами Word в одном архиве (для рассылки кураторам)
+    if (p === "/api/programs.zip" && req.method === "GET") {
+      if (!me.admin) return send(res, 403, { error: "Архив программ скачивает оператор" });
+      const files = JSON.parse(sections()).map((s) => [
+        "Программа секции " + String(s.num).padStart(2, "0") + ".docx", programDocx([s], state),
+      ]);
+      res.writeHead(200, {
+        "Content-Type": "application/zip",
+        "Content-Disposition": "attachment; filename*=UTF-8''" + encodeURIComponent("Программы секций.zip"),
+        "Cache-Control": "no-store",
+      });
+      return res.end(zip(files));
     }
     if (p === "/api/program.docx" && req.method === "GET") {
       const want = url.searchParams.get("sec");

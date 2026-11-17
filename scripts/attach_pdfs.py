@@ -66,8 +66,9 @@ def collect(src, tmp):
                         name = name.encode("cp437").decode("cp866")
                     except Exception:
                         pass
-                target = root / name
-                if info.is_dir():
+                target = (root / name).resolve()
+                # имена вида ../ в архиве не должны выводить файлы за пределы временной папки
+                if info.is_dir() or not str(target).startswith(str(root.resolve()) + "/"):
                     continue
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with z.open(info) as f, open(target, "wb") as o:
@@ -127,6 +128,9 @@ def main():
         for rid, fs in per_rid.items():
             reps = sorted(by_rid[rid], key=lambda r: r["n"])
             pdfs = [p for p in (to_pdf(f, tmp) for f in fs) if p]
+            if not pdfs:
+                print(f"заявка {rid}: не удалось перевести в PDF:", ", ".join(f.name for f in fs))
+                continue
             if len(reps) == 1:
                 best = max(pdfs, key=lambda p: len(words(reps[0]["title"]) & words(pdf_text(p))))
                 assigned.setdefault(reps[0]["key"], best)
