@@ -541,7 +541,7 @@ function start(){
     S.statusText=me.storage==="github"?"Отметки сохраняются автоматически и видны другим экспертам.":"Внимание: постоянное хранилище не настроено, отметки пропадут при перезапуске сервера.";
     setStatus(S.statusText,me.storage!=="github");
     var who=document.getElementById("who");who.textContent="";
-    who.appendChild(h("span",{text:S.myName+(S.admin?" · оператор":(S.observer?" · наблюдатель"+((me.viewSecs||[]).length?", секция "+me.viewSecs.join(", "):"")+" (только просмотр)":(S.reviewSecs.length?" · помощник, секция "+S.reviewSecs.join(", "):(S.secs.length?" · куратор секции "+S.secs.join(", "):""))))}));
+    who.appendChild(h("span",{text:S.myName+(S.admin?" · администратор":(S.observer?" · наблюдатель"+((me.viewSecs||[]).length?", секция "+me.viewSecs.join(", "):"")+" (только просмотр)":(S.reviewSecs.length?" · помощник, секция "+S.reviewSecs.join(", "):(S.secs.length?" · куратор секции "+S.secs.join(", "):""))))}));
     who.appendChild(h("button",{class:"back",text:"Выйти",onclick:function(){api("POST","/api/logout").then(function(){location.href="/login";},function(){location.href="/login";});}}));
     render();
     setInterval(function(){if(!document.hidden)poll();},8000);
