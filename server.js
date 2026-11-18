@@ -355,7 +355,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(302, { Location: "/login", "Cache-Control": "no-store" }); return res.end();
     }
     if (p === "/" || p === "/index.html") return send(res, 200, file("index.html"), "text/html; charset=utf-8");
-    if (p === "/api/me") return send(res, 200, { id: me.id, name: me.name, admin: me.admin, secs: me.secs || [], observer: !!me.observer, reviewSecs: me.reviewSecs || [], storage: GH_TOKEN ? "github" : "memory" });
+    if (p === "/api/me") return send(res, 200, { id: me.id, name: me.name, admin: me.admin, secs: me.secs || [], observer: !!me.observer, reviewSecs: me.reviewSecs || [], viewSecs: me.admin ? [] : me.viewSecs || [], storage: GH_TOKEN ? "github" : "memory" });
     if (p === "/api/sections") return send(res, 200, sectionsFor(me));
     const pdf = p.match(/^\/files\/(\d{1,12}-[12])\.pdf$/);
     if (pdf) {
