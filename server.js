@@ -65,7 +65,10 @@ function parseExperts(raw) {
       if (name === "Толчина Мария Сергеевна" || name === "Бутылкина Ксения Дмитриевна") observer = true;
     }
     const id = "e" + crypto.createHash("sha256").update(name).digest("hex").slice(0, 12);
-    out.set(code, { id, name, admin, secs, observer, reviewSecs });
+    // наблюдатель с секциями («!#4 Иванова») только смотрит эти секции: права куратора ему не даются
+    let viewSecs = [...new Set([...secs, ...reviewSecs])];
+    const curSecs = observer ? [] : secs;
+    out.set(code, { id, name, admin, secs: curSecs, observer, reviewSecs, viewSecs });
   });
   return out;
 }
@@ -291,22 +294,33 @@ function conflict(me, r) {
   const k = personKey(me.name);
   return !!k && [r.name, ...(r.coauthors || [])].some((n) => personKey(n) === k);
 }
+// какие секции видит пользователь: оператор все, остальные только свои (куратор, помощник, наблюдатель)
+function canSee(me, sec) { return !!me.admin || (me.viewSecs || []).includes(Number(sec)); }
+let sectionsByUser = new Map();
+function sectionsFor(me) {
+  if (me.admin) return sections();
+  if (!sectionsByUser.has(me.id)) sectionsByUser.set(me.id, JSON.stringify(JSON.parse(sections()).filter((s) => canSee(me, s.num))));
+  return sectionsByUser.get(me.id);
+}
 function canDecide(me, r) { return !!r && (me.admin || (me.secs || []).includes(r.sec)); }
 function canReview(me, r) {
   if (!r || me.observer) return false;
   if (me.admin) return true;
-  if ((me.reviewSecs || []).length) return me.reviewSecs.includes(r.sec);
-  return !(me.secs || []).length || me.secs.includes(r.sec);
+  return canSee(me, r.sec);
 }
 
-function publicMarks() {
+function publicMarks(me) {
+  const seeKey = (k) => { const r = reports().get(k); return !!r && canSee(me, r.sec); };
   const ex = {};
   for (const [id, e] of Object.entries(state.experts)) {
     const picks = {};
-    for (const [k, p] of Object.entries(e.picks || {})) if (p && p.s) picks[k] = { s: p.s, c: p.c || "" };
+    for (const [k, p] of Object.entries(e.picks || {})) if (p && p.s && seeKey(k)) picks[k] = { s: p.s, c: p.c || "" };
+    if (!Object.keys(picks).length && id !== me.id) continue;
     ex[id] = { name: (EXPERTS_BY_ID.get(id) || {}).name || e.name || "Эксперт", picks };
   }
-  return { version, experts: ex, decisions: state.decisions || {}, order: state.order || {}, secinfo: state.secinfo || {}, labels: { decisions: DECISIONS, none: NEW_STATUS } };
+  const bySec = (o) => Object.fromEntries(Object.entries(o || {}).filter(([sec]) => canSee(me, sec)));
+  const decisions = Object.fromEntries(Object.entries(state.decisions || {}).filter(([k]) => seeKey(k)));
+  return { version, experts: ex, decisions, order: bySec(state.order), secinfo: bySec(state.secinfo), labels: { decisions: DECISIONS, none: NEW_STATUS } };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -342,9 +356,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === "/" || p === "/index.html") return send(res, 200, file("index.html"), "text/html; charset=utf-8");
     if (p === "/api/me") return send(res, 200, { id: me.id, name: me.name, admin: me.admin, secs: me.secs || [], observer: !!me.observer, reviewSecs: me.reviewSecs || [], storage: GH_TOKEN ? "github" : "memory" });
-    if (p === "/api/sections") return send(res, 200, sections());
+    if (p === "/api/sections") return send(res, 200, sectionsFor(me));
     const pdf = p.match(/^\/files\/(\d{1,12}-[12])\.pdf$/);
     if (pdf) {
+      const pr = reports().get(pdf[1]);
+      if (!pr || !canSee(me, pr.sec)) return send(res, 404, { error: "Файла нет" });
       const fp = path.join(FILES, pdf[1] + ".pdf");
       if (!fs.existsSync(fp)) return send(res, 404, { error: "Файла нет" });
       res.writeHead(200, {
@@ -356,7 +372,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === "/api/marks" && req.method === "GET") {
       if (url.searchParams.get("v") === String(version)) return send(res, 200, { version, same: true });
-      return send(res, 200, publicMarks());
+      return send(res, 200, publicMarks(me));
     }
     if (p === "/api/marks" && req.method === "PUT") {
       const b = await readBody(req);
@@ -415,7 +431,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === "/api/program.docx" && req.method === "GET") {
       const want = url.searchParams.get("sec");
-      const secs = JSON.parse(sections()).filter((s) => !want || want === "all" || String(s.num) === want);
+      const secs = JSON.parse(sections()).filter((s) => canSee(me, s.num) && (!want || want === "all" || String(s.num) === want));
       if (!secs.length) return send(res, 404, { error: "Нет такой секции" });
       const buf = programDocx(secs, state);
       const fname = want && want !== "all" ? "Программа секции " + want + ".docx" : "Программа секций.docx";

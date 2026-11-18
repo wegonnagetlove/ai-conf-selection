@@ -176,7 +176,7 @@ function nameOf(uid){if(uid===S.me)return "Вы";return S.names[uid]||"Эксп�
 
 /* ---------- решения кураторов и проверки ---------- */
 function canDecide(sec){return S.admin||S.secs.indexOf(sec)>=0;}
-function canReview(sec){return !S.observer&&(S.admin||(S.reviewSecs.length?S.reviewSecs.indexOf(sec)>=0:(!S.secs.length||S.secs.indexOf(sec)>=0)));}
+function canReview(sec){return !S.observer&&(S.admin||S.secs.indexOf(sec)>=0||S.reviewSecs.indexOf(sec)>=0);}
 function isCurator(){return S.admin||S.secs.length>0;}
 function personKey(n){var w=str(n).replace(/ё/gi,"е").replace(/[.,]/g," ").trim().split(/\s+/).filter(Boolean);
   if(!w.length)return "";return (w[0]+" "+w.slice(1,3).map(function(x){return x[0]}).join("")).toLowerCase();}
@@ -248,10 +248,11 @@ function renderHome(v){
     h("div",{class:"stat y"},h("b",{text:String(st.maybe)}),h("span",{text:"под вопросом"})),
     h("div",{class:"stat"},h("b",{text:String(st.mine)}),h("span",{text:"оценено вами"}))));
   var central=S.sections.filter(function(s){return s.num<=9}),reg=S.sections.filter(function(s){return s.num>9});
-  v.appendChild(h("h2",{text:"Центральная площадка, секции с 1 по 9"}));
-  v.appendChild(grid(central));
-  v.appendChild(h("h2",{text:"Региональные площадки"}));
-  v.appendChild(grid(reg));
+  if(central.length){v.appendChild(h("h2",{text:S.admin?"Центральная площадка, секции с 1 по 9":"Центральная площадка"}));
+  v.appendChild(grid(central));}
+  if(reg.length){v.appendChild(h("h2",{text:"Региональные площадки"}));
+  v.appendChild(grid(reg));}
+  if(!S.sections.length)v.appendChild(h("p",{text:"Для вашего кода не назначено ни одной секции. Обратитесь к оператору."}));
   v.appendChild(h("h2",{text:"Сводка"}));
   var sumCard=h("button",{class:"folder",onclick:function(){go("summary")}},
     h("div",{class:"row"},h("div",{class:"num sum",text:"Σ"}),
