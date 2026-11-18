@@ -201,7 +201,7 @@ function flags(r){
   if(r.pages>2)f.push(["r",r.pages+" стр.: больше 2 страниц"]);
   var other=ridReports(r.rid).filter(function(x){return x.key!==r.key});
   if(other.length)f.push(["y","второй доклад автора: секция "+other.map(secOf).join(", ")]);
-  if(dd==="poster"&&isDistant(r))f.push(["r","решение «постер», а участник дистанционно"]);
+  if(dd==="poster"&&isDistant(r))f.push(["r","статус «постер», а участник дистанционно"]);
   if(secOf(r)>9&&(dd==="poster"||(!dd&&isPoster(r))))f.push(["r","на региональных площадках постеров нет"]);
   if(mine(r))f.push(["b","ваша заявка: решает другой член оргкомитета"]);
   return f;}
@@ -214,7 +214,7 @@ function sendDecision(key,patch){
   for(var k in patch)next[k]=patch[k];
   S.dec[key]=next;dirty=true;
   return api("PUT","/api/decision",{key:key,d:next.d,rev:next.rev,note:next.note})
-    .then(function(){dirty=false;},function(e){dirty=false;if(e.message!=="auth")toast(e.message||"Решение не сохранилось");});}
+    .then(function(){dirty=false;},function(e){dirty=false;if(e.message!=="auth")toast(e.message||"Статус не сохранился");});}
 
 /* ---------- маршрутизация ---------- */
 function route(){var hs=(location.hash||"").replace(/^#/,"");
@@ -252,7 +252,7 @@ function renderHome(v){
   v.appendChild(grid(central));}
   if(reg.length){v.appendChild(h("h2",{text:"Региональные площадки"}));
   v.appendChild(grid(reg));}
-  if(!S.sections.length)v.appendChild(h("p",{text:"Для вашего кода не назначено ни одной секции. Обратитесь к оператору."}));
+  if(!S.sections.length)v.appendChild(h("p",{text:"Для вашего кода не назначено ни одной секции. Обратитесь к Полине Петрухиной."}));
   v.appendChild(h("h2",{text:"Сводка"}));
   var sumCard=h("button",{class:"folder",onclick:function(){go("summary")}},
     h("div",{class:"row"},h("div",{class:"num sum",text:"Σ"}),
@@ -282,7 +282,7 @@ function renderSection(v,s){
   var search=h("input",{class:"search",type:"search",placeholder:"Поиск по ФИО, вузу, названию доклада",value:S.q,
     oninput:function(e){S.q=e.target.value;drawList();}});
   var F=S.observer?[["all","Все"],["anyyes","Выбраны кем-либо"],["maybe","Под вопросом"],["pages","Больше 2 страниц"]]:[["all","Все"],["todo","Не оценены мной"],["mineyes","Выбраны мной"],["anyyes","Выбраны кем-либо"],["maybe","Под вопросом"],["pages","Больше 2 страниц"]];
-  if(canDecide(s.num))F=F.concat([["nodec","Без решения куратора"],["flag","С пометками"]]);
+  if(canDecide(s.num))F=F.concat([["nodec","Статус не изменён"],["flag","С пометками"]]);
   var seg=h("div",{class:"seg"},F.map(function(f){return h("button",{class:S.filter===f[0]?"on":"",text:f[1],onclick:function(){S.filter=f[0];render();}})}));
   if(canDecide(s.num))v.appendChild(curatorPanel(s));
   v.appendChild(h("div",{class:"tools"},search,seg));
@@ -331,7 +331,7 @@ function card(r){
     r.pages?h("span",{class:"org",text:r.pages+" "+(r.pages%10===1&&r.pages%100!==11?"страница":(r.pages%10>=2&&r.pages%10<=4&&(r.pages%100<10||r.pages%100>=20)?"страницы":"страниц"))}):null));
   var fl=flags(r);
   if(fl.length||(dc&&dc.d))el.appendChild(h("div",{class:"flags"},
-    dc&&dc.d?h("span",{class:"pill b",text:"Решение: "+DEC_SHORT[dc.d]+(dc.rev?", доработка до 01.12":"")}):null,
+    dc&&dc.d?h("span",{class:"pill b",text:"Статус: "+DEC_SHORT[dc.d]+(dc.rev?", доработка до 01.12":"")}):null,
     fl.map(function(f){return h("span",{class:"pill "+f[0],text:f[1]})})));
   if(r.problem)el.appendChild(h("details",null,h("summary",{text:"Какую проблему автор хочет решить с помощью ИИ"}),h("p",{text:str(r.problem)})));
   var dis=!S.me||!canReview(secOf(r));
@@ -352,9 +352,9 @@ function card(r){
 function decisionBlock(r){
   var dc=decOf(r.key)||{},blocked=mine(r);
   var box=h("div",{class:"decide"});
-  box.appendChild(h("div",{class:"lbl",text:blocked?"Решение куратора: по своей заявке решение принимает другой член оргкомитета":"Решение куратора = статус на портале «Ломоносов» (оператор переносит 22 ноября) и строка в программе"}));
+  box.appendChild(h("div",{class:"lbl",text:blocked?"Статус заявки: в своей заявке статус меняет другой член оргкомитета":"Статус заявки = статус на портале «Ломоносов» (Полина Петрухина переносит 22 ноября) и строка в программе"}));
   var sel=h("select",{disabled:blocked,onchange:function(e){sendDecision(r.key,{d:e.target.value||null}).then(render);}});
-  sel.appendChild(h("option",{value:"",text:"Новая (решение не принято)"}));
+  sel.appendChild(h("option",{value:"",text:"Новая (статус не изменён)"}));
   DEC_ORDER.forEach(function(k){var o=h("option",{value:k,text:str(S.labels.decisions[k])||k});if(dc.d===k)o.selected=true;sel.appendChild(o);});
   var hint=null;
   if(!FINAL[dc.d]){var sug=isDistant(r)?"oral_on":(isPoster(r)&&secOf(r)<=9?"poster":"oral_off");hint=h("span",{class:"org",text:"по заявке: "+DEC_SHORT[sug]});}
@@ -362,7 +362,7 @@ function decisionBlock(r){
   // исправленные файлы после 01.12 смотрят на портале, поэтому здесь только пометка «дать время на доработку»
   var rev=h("input",{type:"checkbox",disabled:blocked,onchange:function(e){sendDecision(r.key,{rev:e.target.checked}).then(render);}});rev.checked=!!dc.rev;
   box.appendChild(h("div",{class:"row"},h("label",null,rev,"Дать автору время на доработку (до 01.12)")));
-  var note=h("input",{type:"text",disabled:blocked,placeholder:"Что доработать (текст для уведомления автору) или комментарий для оператора",value:str(dc.note)});
+  var note=h("input",{type:"text",disabled:blocked,placeholder:"Комментарий для Полины Петрухиной (необязательно). Что исправить, сообщите участнику сами",value:str(dc.note)});
   var t=null;note.addEventListener("input",function(){clearTimeout(t);dirty=true;t=setTimeout(function(){sendDecision(r.key,{note:note.value.slice(0,1000)});},700);});
   box.appendChild(note);
   return box;
@@ -375,7 +375,7 @@ function curatorPanel(s){
     h("span",{class:"pill "+(c.oral>LIMIT.oral?"r":"g"),text:"устных "+c.oral+" из "+LIMIT.oral}),
     s.num<=9?h("span",{class:"pill "+(c.poster>LIMIT.poster?"r":"g"),text:"постеров "+c.poster+" из "+LIMIT.poster}):null,
     h("span",{class:"pill",text:"слушателей "+c.listen}),
-    h("span",{class:"pill "+(c.none?"y":"g"),text:"без решения "+c.none})));
+    h("span",{class:"pill "+(c.none?"y":"g"),text:"статус не изменён "+c.none})));
   function field(lbl,key,multi,ph){var el=multi?h("textarea",{placeholder:ph}):h("input",{type:"text",placeholder:ph});el.value=str(info[key]);
     var t=null;el.addEventListener("input",function(){clearTimeout(t);dirty=true;t=setTimeout(saveInfo,800);});fields[key]=el;
     return h("div",null,h("div",{class:"lbl",text:lbl}),el);}
@@ -447,23 +447,23 @@ function renderSummary(v){
 // порядок работы: кураторы до 21 ноября передают оператору таблицу своей секции со статусами,
 // оператор проверяет и 22 ноября переносит статусы на портал, затем рассылает программы секций
 function renderPortal(v){
-  v.appendChild(h("h2",{text:S.admin?"Статусы для портала «Ломоносов»":"Таблица статусов для оператора"}));
+  v.appendChild(h("h2",{text:S.admin?"Статусы для портала «Ломоносов»":"Таблица статусов для Полины Петрухиной"}));
   v.appendChild(h("p",{class:"legend",text:S.admin
     ?"Кураторы передают таблицы до 21 ноября. Проверьте замечания и 22 ноября перенесите статусы на портал; текст из столбца «Уведомление автору» можно вставить в поле уведомления на портале. После этого скачайте программы секций и отправьте кураторам."
-    :"До 21 ноября проставьте решения по всем докладам секции, скопируйте таблицу и отправьте оператору. Статусы на портале меняет оператор 22 ноября; дальнейшие изменения после публикации предварительной программы куратор вносит на портале и в программу сам."}));
+    :"До 21 ноября смените статусы всех докладов секции, скопируйте таблицу и отправьте Полине Петрухиной. На портале статусы меняются 22 ноября; дальнейшие изменения после публикации предварительной программы куратор вносит на портале и в программу сам."}));
   var rids={};allReports().forEach(function(r){if(S.admin||S.secs.indexOf(secOf(r))>=0)(rids[r.rid]=rids[r.rid]||[]).push(r);});
   var list=Object.keys(rids).map(function(rid){var reps=ridReports(rid);
     var st=reps.map(function(r){return portalStatus(r.key)});
     var uniq=st.filter(function(x,i){return st.indexOf(x)===i});
     var issues=[],notes=[];
     reps.forEach(function(r){var d=decOf(r.key)||{};
-      if(!d.d)issues.push("секция "+secOf(r)+": нет решения");
-      else if(!FINAL[d.d])issues.push("секция "+secOf(r)+": на рассмотрении, решение не окончательное");
+      if(!d.d)issues.push("секция "+secOf(r)+": статус не изменён");
+      else if(!FINAL[d.d])issues.push("секция "+secOf(r)+": на рассмотрении, статус не окончательный");
       if(d.rev)issues.push("секция "+secOf(r)+": дано время на доработку до 01.12");
       if(d.note)notes.push(str(d.note));
       // для слушателей и отклонённых формальные требования к тезисам и возрасту уже не важны
       if(!/^listen_|^reject$/.test(str(d.d)))flags(r).forEach(function(f){if(f[0]==="r")issues.push(f[1]);});});
-    if(uniq.length>1)issues.push("разные решения в двух секциях: согласовать один статус");
+    if(uniq.length>1)issues.push("разные статусы в двух секциях: согласовать один");
     var co=[];reps.forEach(function(r){(r.coauthors||[]).forEach(function(n){if(co.indexOf(str(n))<0)co.push(str(n))})});
     return {rid:rid,r:reps[0],reps:reps,co:co,status:uniq.length===1?uniq[0]:"",issues:issues,notes:notes.join(" / ")};})
     .sort(function(a,b){return (a.reps.map(secOf)[0]-b.reps.map(secOf)[0])||str(a.r.name).localeCompare(str(b.r.name),"ru")});

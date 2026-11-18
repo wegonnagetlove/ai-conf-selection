@@ -393,8 +393,8 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       const r = reports().get(String(b.key || ""));
       if (!r) return send(res, 400, { error: "Нет такого доклада" });
-      if (!canDecide(me, r)) return send(res, 403, { error: "Решение по этой секции принимает её куратор" });
-      if (conflict(me, r)) return send(res, 403, { error: "Это ваша заявка: решение по ней принимает другой член оргкомитета" });
+      if (!canDecide(me, r)) return send(res, 403, { error: "Статус в этой секции меняет её куратор" });
+      if (conflict(me, r)) return send(res, 403, { error: "Это ваша заявка: статус в ней меняет другой член оргкомитета" });
       state.decisions[r.key] = cleanDecision(b, me.name, Date.now());
       version++; scheduleSave();
       return send(res, 200, { ok: true, version });
