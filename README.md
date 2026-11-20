@@ -76,3 +76,10 @@ git commit -am "Обновлён список заявок" && git push
 ```bash
 SESSION_SECRET=dev EXPERTS="Тест=test123456" node server.js
 ```
+
+## Синхронизация с порталом через GitHub Actions
+
+Workflow «Синхронизация с порталом «Ломоносов»» (`.github/workflows/sync-confhub.yml`, скрипт `scripts/sync_confhub.py`) берёт последнюю выгрузку заявок, пересобирает `sections.json`, скачивает файлы тезисов по именам из выгрузки (колонки 30 и 34), переводит их в PDF и коммитит в `main`. Новый файл кладётся, если на сайте его ещё нет или автор загрузил другую версию (сопоставление «доклад → имя файла» в `site/data/thesis_files.json`).
+
+1. На портале на странице заявок мероприятия нажать «Экспортировать в XLS» и дождаться выполнения в «Списке фоновых задач».
+2. Запустить workflow: на GitHub во вкладке Actions кнопкой «Run workflow», или `gh workflow run sync-confhub.yml`, или коммитом, меняющим `.github/sync-request`.
