@@ -68,6 +68,14 @@ def main():
             if name and key in keys and re.fullmatch(r"[\w.-]+", name):
                 wanted[key] = name
 
+    # второй доклад с тем же названием, что и первый, и без своего файла: тезисы общие
+    titles = {r["key"]: r["title"].strip().lower() for s in sections for r in s["reports"]}
+    for k in keys:
+        if k.endswith("-2") and k not in wanted:
+            k1 = k[:-2] + "-1"
+            if k1 in wanted and titles.get(k) == titles.get(k1):
+                wanted[k] = wanted[k1]
+
     known = json.loads(MAP.read_text(encoding="utf-8")) if MAP.exists() else {}
     todo = {k: v for k, v in wanted.items() if known.get(k) != v or not (FILES / f"{k}.pdf").exists()}
     dl = tmp / "dl"

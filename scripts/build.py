@@ -28,7 +28,8 @@ for r in d:
     base=dict(rid=g(r,0), name=g(r,3), org=g(r,21) or g(r,15), faculty=g(r,16), level=g(r,18),
               city=g(r,13), fmt=g(r,22), over35=over35(r), sno=snt(g(r,26)), problem=g(r,35), coauthors=co.get(g(r,0),[]))
     reports.append(dict(base, key=g(r,0)+'-1', sec=secnum(g(r,27)), kind=g(r,28), title=g(r,29), n=1))
-    if g(r,31) and g(r,33):
+    # второй доклад без названия («-», «нет») не считаем докладом
+    if g(r,31) and g(r,33) and snt(g(r,33).strip('.—–- ')):
         reports.append(dict(base, key=g(r,0)+'-2', sec=secnum(g(r,31)), kind=g(r,32), title=g(r,33), n=2))
 listeners=[dict(rid=g(r,0),name=g(r,3),org=g(r,21) or g(r,15),level=g(r,18),city=g(r,13),fmt=g(r,23) or g(r,22)) for r in d if g(r,6)=='Участник-слушатель форума']
 missing=[p for p in co if p not in ids]
