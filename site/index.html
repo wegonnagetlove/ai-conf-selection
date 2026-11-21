@@ -142,9 +142,9 @@ td.n{white-space:nowrap;text-align:center}
 "use strict";
 var S={sections:[],marks:{},me:null,canWrite:null,readOnly:false,names:{},filter:"all",q:"",loaded:{sec:false,marks:false},
   admin:false,secs:[],observer:false,reviewSecs:[],dec:{},order:{},secinfo:{},labels:{decisions:{},none:"Новая"}};
-var DEC_ORDER=["review","oral_off","oral_on","poster","listen_off","listen_on","reject"];
-var DEC_SHORT={review:"на рассмотрении",oral_off:"устный очно",oral_on:"устный онлайн",poster:"постер",listen_off:"слушатель очно",listen_on:"слушатель онлайн",reject:"отклонена"};
-var FINAL={oral_off:1,oral_on:1,poster:1,listen_off:1,listen_on:1,reject:1};
+var DEC_ORDER=["review","oral_off","oral_on","poster","round_table","listen_off","listen_on","reject"];
+var DEC_SHORT={review:"на рассмотрении",oral_off:"устный очно",oral_on:"устный онлайн",poster:"постер",round_table:"круглый стол",listen_off:"слушатель очно",listen_on:"слушатель онлайн",reject:"отклонена"};
+var FINAL={oral_off:1,oral_on:1,poster:1,round_table:1,listen_off:1,listen_on:1,reject:1};
 var LIMIT={oral:7,poster:8};
 var myPicks={},dirty=false;
 var STAT={yes:"Выбран",maybe:"Под вопросом",no:"Не подходит"};
@@ -205,9 +205,9 @@ function flags(r){
   if(secOf(r)>9&&(dd==="poster"||(!dd&&isPoster(r))))f.push(["r","на региональных площадках постеров нет"]);
   if(mine(r))f.push(["b","ваша заявка: решает другой член оргкомитета"]);
   return f;}
-function sectionCounts(s){var c={oral:0,poster:0,none:0,listen:0};
+function sectionCounts(s){var c={oral:0,poster:0,round:0,none:0,listen:0};
   (s.reports||[]).forEach(function(r){var d=decOf(r.key),dd=d&&d.d;
-    if(dd==="oral_off"||dd==="oral_on")c.oral++;else if(dd==="poster")c.poster++;else if(dd==="listen_off"||dd==="listen_on")c.listen++;else if(!FINAL[dd])c.none++;});
+    if(dd==="oral_off"||dd==="oral_on")c.oral++;else if(dd==="poster")c.poster++;else if(dd==="round_table")c.round++;else if(dd==="listen_off"||dd==="listen_on")c.listen++;else if(!FINAL[dd])c.none++;});
   return c;}
 function sendDecision(key,patch){
   var cur=decOf(key)||{},next={d:cur.d||null,rev:!!cur.rev,note:str(cur.note)};
@@ -374,6 +374,7 @@ function curatorPanel(s){
   p.appendChild(h("div",{class:"meta"},
     h("span",{class:"pill "+(c.oral>LIMIT.oral?"r":"g"),text:"устных "+c.oral+" из "+LIMIT.oral}),
     s.num<=9?h("span",{class:"pill "+(c.poster>LIMIT.poster?"r":"g"),text:"постеров "+c.poster+" из "+LIMIT.poster}):null,
+    h("span",{class:"pill",text:"круглый стол "+c.round}),
     h("span",{class:"pill",text:"слушателей "+c.listen}),
     h("span",{class:"pill "+(c.none?"y":"g"),text:"статус не изменён "+c.none})));
   function field(lbl,key,multi,ph){var el=multi?h("textarea",{placeholder:ph}):h("input",{type:"text",placeholder:ph});el.value=str(info[key]);
