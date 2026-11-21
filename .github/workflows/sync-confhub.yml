@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Проверка доступа к порталу
-        run: curl -sS -o /dev/null -w '%{http_code}\n' --max-time 60 https://confhub.ru/rus/event/10771/
+        run: curl -sS -o /dev/null -w '%{http_code}\n' --max-time 60 https://confhub.ru/rus/event/10771/ || echo 'портал отвечает медленно'
       - name: LibreOffice и poppler
         run: |
           sudo apt-get update -qq
