@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 FILES = ROOT / "files"
 SECTIONS = ROOT / "site" / "data" / "sections.json"
 MAP = ROOT / "site" / "data" / "thesis_files.json"
+CHANGES = ROOT / "site" / "data" / "changes.json"
 BASE = "https://confhub.ru"
 EXPORT = BASE + "/tmp/request_list_event_10771_85c7a44daccbf912f5c22101a53ebdc1.zip"
 UA = {"User-Agent": "Mozilla/5.0 (ai-conf-selection sync)"}
@@ -46,6 +47,8 @@ def norm_text(p):
 
 def main():
     export = EXPORT
+    old = {r["key"]: dict(r, sec=sec["num"]) for sec in json.loads(SECTIONS.read_text(encoding="utf-8"))
+           for r in sec["reports"]} if SECTIONS.exists() else {}
     if "--export" in sys.argv:
         export = sys.argv[sys.argv.index("--export") + 1]
     tmp = Path(tempfile.mkdtemp())
@@ -123,6 +126,41 @@ def main():
     # отметки pdf и число страниц
     subprocess.run([sys.executable, str(ROOT / "scripts" / "attach_pdfs.py")], cwd=ROOT, check=True)
 
+    # журнал изменений: что поменялось в заявках с прошлой синхронизации
+    new = {r["key"]: dict(r, sec=sec["num"]) for sec in json.loads(SECTIONS.read_text(encoding="utf-8"))
+           for r in sec["reports"]}
+    labels = {"sec": "секция", "title": "название", "kind": "форма доклада", "fmt": "формат участия",
+              "problem": "проблема", "name": "ФИО", "org": "организация", "level": "уровень",
+              "coauthors": "соавторы", "city": "город", "faculty": "факультет", "sno": "СНО"}
+    stamp = __import__("datetime").datetime.now(__import__("zoneinfo").ZoneInfo("Europe/Moscow")).strftime("%Y-%m-%d %H:%M")
+    entries = []
+    if old:
+        for k, r in new.items():
+            if k not in old:
+                entries.append({"key": k, "type": "added", "sec": r["sec"], "name": r["name"]})
+                continue
+            f = [labels[x] for x in labels if old[k].get(x) != r.get(x)]
+            if k in replaced:
+                f.append("файл тезисов")
+            if f:
+                e = {"key": k, "type": "changed", "sec": r["sec"], "name": r["name"], "fields": f}
+                if old[k].get("sec") != r["sec"]:
+                    e["from_sec"] = old[k].get("sec")
+                if old[k].get("title") != r.get("title"):
+                    e["old_title"] = old[k].get("title")
+                entries.append(e)
+        for k, r in old.items():
+            if k not in new:
+                entries.append({"key": k, "type": "removed", "sec": r["sec"], "name": r["name"]})
+    for k in added:
+        if not any(e["key"] == k for e in entries):
+            entries.append({"key": k, "type": "changed", "sec": new[k]["sec"], "name": new[k]["name"], "fields": ["файл тезисов"]})
+    if entries:
+        log = json.loads(CHANGES.read_text(encoding="utf-8")) if CHANGES.exists() else []
+        log = [dict(e, at=stamp) for e in entries] + log
+        CHANGES.write_text(json.dumps(log, ensure_ascii=False, indent=1), encoding="utf-8")
+    ch = [e for e in entries if e["type"] == "changed"]
+
     no_file = sorted(k for k in keys if k not in wanted)
     total = len(keys)
     with_pdf = sum(1 for k in keys if (FILES / f"{k}.pdf").exists())
@@ -132,7 +170,7 @@ def main():
         f"Заменено (автор загрузил новую версию): {len(replaced)}" + (f" ({', '.join(replaced)})" if replaced else ""),
         f"Проверено без изменений: {len(same)}",
         f"Без файла на портале: {len(no_file)}" + (f" ({', '.join(no_file)})" if no_file else ""),
-    ] + failed
+    ] + [f"Изменено в заявках: {len(ch)}" + ("".join(f"\n  {e['key']} (секция {e['sec']}, {e['name']}): {', '.join(e['fields'])}" for e in ch))] + failed
     print("\n".join(lines))
     summary = Path(__import__("os").environ.get("GITHUB_STEP_SUMMARY", "/dev/null"))
     with open(summary, "a", encoding="utf-8") as f:
