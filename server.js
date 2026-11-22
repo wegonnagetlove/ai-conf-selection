@@ -120,7 +120,7 @@ function failed(ip) { attemptsOf(ip).n++; }
 
 /* ---------- отметки ---------- */
 // state.experts[id] = { name, picks: { "<заявка>-<1|2>": { s: "yes"|"maybe"|"no"|null, c: "", t: ms } } }
-// state.decisions["<заявка>-<1|2>"] = { d, rev, note, by, t }  решение куратора (rev: дано время на доработку до 01.12)
+// state.decisions["<заявка>-<1|2>"] = { d, pub, rev, note, by, t }  решение куратора (pub: публикация тезисов yes/no/null; rev: дано время на доработку до 01.12)
 // state.order["<секция>"] = { keys: [...], t }                         порядок докладов в программе
 // state.secinfo["<секция>"] = { time, hall, moderator, experts, t }     шапка программы секции
 let state = { experts: {}, decisions: {}, order: {}, secinfo: {} };
@@ -177,6 +177,8 @@ function cleanDecision(b, by, t) {
   if (d === "revise") { d = "review"; rev = true; }
   return {
     d: Object.prototype.hasOwnProperty.call(DECISIONS, d) ? d : null,
+    // публикация тезисов в сборнике: "yes", "no" или null (не указано); не зависит от статуса заявки
+    pub: b.pub === "yes" || b.pub === "no" ? b.pub : null,
     rev, note: clip(b.note, 1000), by: clip(by, 40), t,
   };
 }
