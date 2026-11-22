@@ -66,6 +66,7 @@ function sectionXml(s, state, first) {
   const reps = s.reports || [];
   const oral = ordered(reps.filter((r) => d(r) === "oral_off" || d(r) === "oral_on"), order, votes);
   const poster = ordered(reps.filter((r) => d(r) === "poster"), order, votes);
+  const round = ordered(reps.filter((r) => d(r) === "round_table"), order, votes);
 
   const out = [];
   const time = info.time || GRID[s.num] || "время уточняется";
@@ -90,7 +91,10 @@ function sectionXml(s, state, first) {
   };
   block("Доклады устные:", oral);
   block("Доклады постерные:", poster);
-  if (!oral.length && !poster.length) out.push(para(run("Решения по докладам секции ещё не приняты.", { i: true }), { before: 160 }));
+  // круглый стол отдельным списком со своей нумерацией
+  n = 0;
+  block("Круглый стол:", round);
+  if (!oral.length && !poster.length && !round.length) out.push(para(run("Решения по докладам секции ещё не приняты.", { i: true }), { before: 160 }));
   return out.join("");
 }
 
