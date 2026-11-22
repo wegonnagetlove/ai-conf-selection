@@ -31,7 +31,7 @@ jobs:
         run: |
           git config user.name "Claude"
           git config user.email "noreply@anthropic.com"
-          git add site/data/sections.json site/data/thesis_files.json site/data/changes.json files 2>/dev/null || git add site/data/sections.json site/data/thesis_files.json files
+          git add site/data/sections.json site/data/thesis_files.json site/data/changes.json site/data/late.json files 2>/dev/null || git add site/data/sections.json site/data/thesis_files.json files
           if git diff --cached --quiet; then echo "Изменений нет"; exit 0; fi
           N=$(python3 -c "import json;print(sum(len(s['reports']) for s in json.load(open('site/data/sections.json'))))")
           git commit -q -m "Синхронизация с порталом: $(TZ=Europe/Moscow date '+%d.%m.%Y %H:%M'), $N докладов"

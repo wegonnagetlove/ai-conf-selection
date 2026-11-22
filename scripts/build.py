@@ -22,9 +22,18 @@ def over35(r):
     c=datetime.date(2026,12,8); age=c.year-b.year-((c.month,c.day)<(b.month,b.day))
     return age>35
 def snt(x): return '' if x.lower() in ('-','нет','нет.','no','') else x
+# приём заявок закрыт 20.11.2026 в 23:59 по Москве. Последняя заявка докладчика до дедлайна: № 1845280
+# (тезисы загружены 20.11 в 23:56). Заявки докладчиков с большим номером на сайт не попадают,
+# их список пишется в site/data/late.json. Исключения по решению оргкомитета перечислены в LATE_OK.
+LAST_RID=1845280
+LATE_OK={"1845239"}  # Караваева Ксения Эдуардовна: подавала в последние полчаса, на портале был сбой
+def late(r): return g(r,0).isdigit() and int(g(r,0))>LAST_RID and g(r,0) not in LATE_OK
+late_list=[dict(rid=g(r,0),name=g(r,3),sec=secnum(g(r,27)),title=g(r,29)) for r in d if g(r,27) and late(r)]
+json.dump(late_list,open('site/data/late.json','w'),ensure_ascii=False,indent=1)
+print('late (not added):',len(late_list))
 reports=[]
 for r in d:
-    if not g(r,27): continue
+    if not g(r,27) or late(r): continue
     base=dict(rid=g(r,0), name=g(r,3), org=g(r,21) or g(r,15), faculty=g(r,16), level=g(r,18),
               city=g(r,13), fmt=g(r,22), over35=over35(r), sno=snt(g(r,26)), problem=g(r,35), coauthors=co.get(g(r,0),[]))
     reports.append(dict(base, key=g(r,0)+'-1', sec=secnum(g(r,27)), kind=g(r,28), title=g(r,29), n=1))

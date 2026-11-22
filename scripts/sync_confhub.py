@@ -161,6 +161,8 @@ def main():
         CHANGES.write_text(json.dumps(log, ensure_ascii=False, indent=1), encoding="utf-8")
     ch = [e for e in entries if e["type"] == "changed"]
 
+    late_p = ROOT / "site" / "data" / "late.json"
+    late = json.loads(late_p.read_text(encoding="utf-8")) if late_p.exists() else []
     no_file = sorted(k for k in keys if k not in wanted)
     total = len(keys)
     with_pdf = sum(1 for k in keys if (FILES / f"{k}.pdf").exists())
@@ -170,6 +172,7 @@ def main():
         f"Заменено (автор загрузил новую версию): {len(replaced)}" + (f" ({', '.join(replaced)})" if replaced else ""),
         f"Проверено без изменений: {len(same)}",
         f"Без файла на портале: {len(no_file)}" + (f" ({', '.join(no_file)})" if no_file else ""),
+    ] + [f"Не добавлены, поданы после дедлайна 20.11: {len(late)}" + "".join(f"\n  {x['rid']} (секция {x['sec']}, {x['name']})" for x in late)
     ] + [f"Изменено в заявках: {len(ch)}" + ("".join(f"\n  {e['key']} (секция {e['sec']}, {e['name']}): {', '.join(e['fields'])}" for e in ch))] + failed
     print("\n".join(lines))
     summary = Path(__import__("os").environ.get("GITHUB_STEP_SUMMARY", "/dev/null"))
