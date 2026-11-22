@@ -395,30 +395,34 @@ function curatorPanel(s){
     field("Зал","hall",false,"например, Зал Лекторий"),
     field("Модератор (каждый с новой строки: ФИО, статус, место работы)","moderator",true,""),
     field("Эксперты (каждый с новой строки)","experts",true,"")));
-  var acc=(s.reports||[]).filter(function(r){var d=decOf(r.key);return d&&(d.d==="oral_off"||d.d==="oral_on"||d.d==="poster");});
+  // блоки программы: устные, постеры, круглый стол; переставлять можно только внутри блока
+  var GROUP={oral_off:0,oral_on:0,poster:1,round_table:2};
+  var grp=function(r){return GROUP[decOf(r.key).d];};
+  var acc=(s.reports||[]).filter(function(r){var d=decOf(r.key);return d&&GROUP.hasOwnProperty(d.d);});
   var ord=((S.order[String(s.num)]||{}).keys||[]).slice();
   acc.sort(function(a,b){var ia=ord.indexOf(a.key),ib=ord.indexOf(b.key);ia=ia<0?1e6:ia;ib=ib<0?1e6:ib;
-    var pa=decOf(a.key).d==="poster"?1:0,pb=decOf(b.key).d==="poster"?1:0;
-    return pa-pb||ia-ib||countBy(marksFor(b.key),"yes")-countBy(marksFor(a.key),"yes");});
+    return grp(a)-grp(b)||ia-ib||countBy(marksFor(b.key),"yes")-countBy(marksFor(a.key),"yes");});
   if(acc.length){
     p.appendChild(h("div",{class:"lbl",text:"Порядок в программе: сильные доклады в начало и конец, близкие по теме рядом"}));
-    var ol=h("div",{class:"olist"});
-    acc.forEach(function(r,i){var d=decOf(r.key).d;
-      ol.appendChild(h("div",{class:"oitem"},h("span",{class:"no",text:(i+1)+"."}),
+    var ol=h("div",{class:"olist"}),last=-1,no=0;
+    acc.forEach(function(r,i){var d=decOf(r.key).d,g=grp(r);
+      if(g!==last){ol.appendChild(h("div",{class:"lbl",style:"margin-top:8px",text:["Доклады устные","Доклады постерные","Круглый стол"][g]}));
+        if(g===2)no=0;last=g;}
+      no++;
+      ol.appendChild(h("div",{class:"oitem"},h("span",{class:"no",text:no+"."}),
         h("span",{class:"t"},h("b",{text:str(r.name)}),". "+str(r.title)),
-        h("span",{class:"pill "+(d==="poster"?"y":"b"),text:DEC_SHORT[d]}),
+        h("span",{class:"pill "+(d==="poster"?"y":d==="round_table"?"g":"b"),text:DEC_SHORT[d]}),
         h("button",{class:"mv",title:"Выше",text:"↑",onclick:function(){move(i,-1)}}),
         h("button",{class:"mv",title:"Ниже",text:"↓",onclick:function(){move(i,1)}})));});
     p.appendChild(ol);
-    // переставлять можно только внутри своего блока: устные отдельно, постеры отдельно
     function move(i,dlt){var j=i+dlt;if(j<0||j>=acc.length)return;
-      if((decOf(acc[i].key).d==="poster")!==(decOf(acc[j].key).d==="poster"))return;var keys=acc.map(function(r){return r.key});var x=keys[i];keys[i]=keys[j];keys[j]=x;
+      if(grp(acc[i])!==grp(acc[j]))return;var keys=acc.map(function(r){return r.key});var x=keys[i];keys[i]=keys[j];keys[j]=x;
       S.order[String(s.num)]={keys:keys};render();
       api("PUT","/api/order",{sec:s.num,keys:keys}).then(function(){},function(e){toast(e.message||"Порядок не сохранился");});}
   }
   p.appendChild(h("div",{class:"row",style:"display:flex;gap:10px;flex-wrap:wrap"},
     h("a",{class:"btn",href:"/api/program.docx?sec="+s.num,text:"Скачать программу секции (Word)"}),
-    h("span",{class:"legend",text:"Программа собирается по шаблону из инструкции: устные доклады, затем постеры, в заданном порядке."})));
+    h("span",{class:"legend",text:"Программа собирается по шаблону из инструкции: устные доклады, затем постеры, затем круглый стол, в заданном порядке."})));
   return p;
 }
 
