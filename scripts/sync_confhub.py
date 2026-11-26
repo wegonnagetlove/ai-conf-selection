@@ -58,7 +58,8 @@ def main():
         z.extract(xls, tmp)
     subprocess.run([sys.executable, str(ROOT / "scripts" / "parse.py"), str(tmp / xls)], cwd=ROOT, check=True,
                    stdout=subprocess.DEVNULL)
-    subprocess.run([sys.executable, str(ROOT / "scripts" / "build.py")], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
+    b = subprocess.run([sys.executable, str(ROOT / "scripts" / "build.py")], cwd=ROOT, check=True, capture_output=True, text=True)
+    print("\n".join(x for x in b.stdout.splitlines() if x.startswith(("columns", "headers"))))
 
     sections = json.loads(SECTIONS.read_text(encoding="utf-8"))
     keys = {r["key"] for s in sections for r in s["reports"]}

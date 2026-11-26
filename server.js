@@ -122,7 +122,7 @@ function failed(ip) { attemptsOf(ip).n++; }
 // state.experts[id] = { name, picks: { "<заявка>-<1|2>": { s: "yes"|"maybe"|"no"|null, c: "", t: ms } } }
 // state.decisions["<заявка>-<1|2>"] = { d, pub, rev, note, by, t }  решение куратора (pub: публикация тезисов yes/no/null; rev: дано время на доработку до 01.12)
 // state.order["<секция>"] = { keys: [...], t }                         порядок докладов в программе
-// state.secinfo["<секция>"] = { time, hall, moderator, experts, t }     шапка программы секции
+// state.secinfo["<секция>"] = { time, hall, moderator, experts, link, poster_time, rt_time, rt_moderator, rt_link, t }  шапка программы секции
 let state = { experts: {}, decisions: {}, order: {}, secinfo: {} };
 let version = 0;
 let remoteSha = null;
@@ -183,7 +183,9 @@ function cleanDecision(b, by, t) {
   };
 }
 function cleanSecinfo(b, t) {
-  return { time: clip(b.time, 60), hall: clip(b.hall, 200), moderator: clip(b.moderator, 1500), experts: clip(b.experts, 3000), t };
+  return { time: clip(b.time, 60), hall: clip(b.hall, 200), moderator: clip(b.moderator, 1500), experts: clip(b.experts, 3000),
+    link: clip(b.link, 500), poster_time: clip(b.poster_time, 60),
+    rt_time: clip(b.rt_time, 60), rt_moderator: clip(b.rt_moderator, 1500), rt_link: clip(b.rt_link, 500), t };
 }
 
 const GH_API = "https://api.github.com/repos/" + GH_REPO;

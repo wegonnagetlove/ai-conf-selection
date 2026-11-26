@@ -6,9 +6,12 @@ SITES={10:'Саранск, МГУ имени Н.П. Огарёва',11:'Сама
 def secnum(s):
     m=re.match(r'\s*(\d+)\.',s); return int(m.group(1)) if m else None
 ids={g(r,0) for r in d}
-co=collections.defaultdict(list)
+co=collections.defaultdict(list); coinfo=collections.defaultdict(list)
 for r in d:
-    if g(r,6).startswith('Соавтор'): co[g(r,4)].append(g(r,3))
+    if g(r,6).startswith('Соавтор'):
+        co[g(r,4)].append(g(r,3))
+        # для программы: у соавтора свои статус, факультет и вуз из его регистрации на портале
+        coinfo[g(r,4)].append(dict(name=g(r,3), level=g(r,18), faculty=g(r,16), org=g(r,21) or g(r,15)))
 # возраст на день конференции (08.12.2026): в sections.json пишется только признак over35, сама дата рождения не попадает
 import datetime
 DOB=next((i for i,x in enumerate(H) if 'рожд' in x),None)
@@ -35,11 +38,15 @@ reports=[]
 for r in d:
     if not g(r,27) or late(r): continue
     base=dict(rid=g(r,0), name=g(r,3), org=g(r,21) or g(r,15), faculty=g(r,16), level=g(r,18),
-              city=g(r,13), fmt=g(r,22), over35=over35(r), sno=snt(g(r,26)), problem=g(r,35), coauthors=co.get(g(r,0),[]))
+              city=g(r,13), fmt=g(r,22), over35=over35(r), sno=snt(g(r,26)), problem=g(r,35), coauthors=co.get(g(r,0),[]), coinfo=coinfo.get(g(r,0),[]))
     reports.append(dict(base, key=g(r,0)+'-1', sec=secnum(g(r,27)), kind=g(r,28), title=g(r,29), n=1))
     # второй доклад без названия («-», «нет») не считаем докладом
     if g(r,31) and g(r,33) and snt(g(r,33).strip('.—–- ')):
         reports.append(dict(base, key=g(r,0)+'-2', sec=secnum(g(r,31)), kind=g(r,32), title=g(r,33), n=2))
+print('columns 15/21:', repr(rows[0][15] if len(rows[0])>15 else ''), '/', repr(rows[0][21] if len(rows[0])>21 else ''),
+      'filled 15:', sum(1 for r in d if g(r,15)), 'filled 21:', sum(1 for r in d if g(r,21)),
+      'differ:', sum(1 for r in d if g(r,15) and g(r,21) and g(r,15)!=g(r,21)))
+print('headers:', ' | '.join(f'{i}:{x}' for i,x in enumerate(rows[0])))
 listeners=[dict(rid=g(r,0),name=g(r,3),org=g(r,21) or g(r,15),level=g(r,18),city=g(r,13),fmt=g(r,23) or g(r,22)) for r in d if g(r,6)=='Участник-слушатель форума']
 missing=[p for p in co if p not in ids]
 print('reports',len(reports),'listeners',len(listeners),'parents missing',missing)

@@ -39,10 +39,18 @@ function online(r, d) {
   if (d === "oral_off" || d === "poster") return false;
   return /Докладчик \(дистанционно\)/.test(r.fmt || "") && !/Докладчик \(очно/.test(r.fmt || "");
 }
+// автор и зарегистрированные на портале соавторы: у каждого свой статус, факультет и вуз;
+// люди с одинаковыми статусом, факультетом и вузом идут подряд через запятую, группы через «;»
 function speaker(r, d) {
-  const who = [r.name, ...(r.coauthors || [])].filter(Boolean).join(", ");
-  const parts = [who, statusText(r), r.faculty, r.org].map((x) => String(x || "").trim()).filter(Boolean);
-  return parts.join(", ") + (online(r, d) ? " (онлайн)" : "");
+  const tail = (p) => [statusText(p), p.faculty, p.org].map((x) => String(x || "").trim()).filter(Boolean).join(", ");
+  const people = [r, ...(r.coinfo || (r.coauthors || []).map((name) => ({ name, level: r.level, faculty: r.faculty, org: r.org })))]
+    .filter((p) => p && String(p.name || "").trim());
+  const groups = [];
+  for (const p of people) {
+    const t = tail(p), g = groups.find((x) => x.t === t);
+    if (g) g.names.push(p.name); else groups.push({ t, names: [p.name] });
+  }
+  return groups.map((g) => [g.names.join(", "), g.t].filter(Boolean).join(", ")).join("; ") + (online(r, d) ? " (онлайн)" : "");
 }
 
 // порядок: сохранённый куратором, затем остальные по числу голосов «Выбран»
@@ -74,6 +82,7 @@ function sectionXml(s, state, first) {
   out.push(para(run(TIMING)));
   out.push(para(run(`Секция «${s.name}»`, { b: true }), { before: 120 }));
   out.push(para(run(info.hall || (s.num > 9 ? s.site : "Зал уточняется"))));
+  if (oral.length) out.push(para([run("Ссылка для подключения: ", { b: true }), run(info.link || "(указать)")]));
   out.push(para(run("Модератор:", { b: true }), { before: 120, keep: true }));
   (lines(info.moderator).length ? lines(info.moderator) : ["(указать)"]).forEach((x) => out.push(para(run(x), { ind: 360 })));
   out.push(para(run("Эксперты:", { b: true }), { before: 120, keep: true }));
@@ -90,10 +99,16 @@ function sectionXml(s, state, first) {
     });
   };
   block("Доклады устные:", oral);
-  block("Доклады постерные:", poster);
-  // круглый стол отдельным списком со своей нумерацией
+  block("Доклады постерные" + (info.poster_time ? ` (${info.poster_time})` : " (время указать)") + ":", poster);
+  // круглый стол отдельным списком со своей нумерацией и своей шапкой: время, модератор, ссылка
   n = 0;
-  block("Круглый стол:", round);
+  if (round.length) {
+    out.push(para([run("Круглый стол", { b: true }), run(info.rt_time ? `, ${info.rt_time}` : ", время указать")], { before: 240, keep: true }));
+    out.push(para(run("Модератор:", { b: true }), { before: 60, keep: true }));
+    (lines(info.rt_moderator).length ? lines(info.rt_moderator) : ["(указать)"]).forEach((x) => out.push(para(run(x), { ind: 360, keep: true })));
+    out.push(para([run("Ссылка для подключения: ", { b: true }), run(info.rt_link || "(указать)")], { keep: true }));
+  }
+  block("Участники:", round);
   if (!oral.length && !poster.length && !round.length) out.push(para(run("Решения по докладам секции ещё не приняты.", { i: true }), { before: 160 }));
   return out.join("");
 }
