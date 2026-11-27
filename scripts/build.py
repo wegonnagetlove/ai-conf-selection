@@ -30,6 +30,8 @@ def snt(x): return '' if x.lower() in ('-','нет','нет.','no','') else x
 # их список пишется в site/data/late.json. Исключения по решению оргкомитета перечислены в LATE_OK.
 LAST_RID=1845280
 LATE_OK={"1845239"}  # Караваева Ксения Эдуардовна: подавала в последние полчаса, на портале был сбой
+# 13 секция (ИТМО), добавлены по просьбе оргкомитета 27.11: Рублёва С.В., Сидоренко А.О., Воронцов А.А., Лобач А.С.
+LATE_OK|={"1857279","1857245","1857047","1852996"}
 def late(r): return g(r,0).isdigit() and int(g(r,0))>LAST_RID and g(r,0) not in LATE_OK
 late_list=[dict(rid=g(r,0),name=g(r,3),sec=secnum(g(r,27)),title=g(r,29)) for r in d if g(r,27) and late(r)]
 json.dump(late_list,open('site/data/late.json','w'),ensure_ascii=False,indent=1)
